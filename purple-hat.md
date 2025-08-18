@@ -190,7 +190,7 @@ Before designing complex test suites:
 - **Minimum viable validation**: What's the least testing that proves it works?
 - **Flag over-verification**: Additional tests beyond requirement validation
 
-### The Issue #748 Learning
+### The Over-Testing Anti-Pattern
 
 Testing a threshold check requires:
 1. Test value below threshold (9,999) - should pass
