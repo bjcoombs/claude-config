@@ -109,7 +109,7 @@ Often the answer is "nothing important."
 - **Addition Critique**: Why we shouldn't add new code
 - **Null Option**: What happens if we do nothing
 
-## Risk Validation & Testing (formerly Purple Hat)
+## Risk Validation & Testing
 
 **Test and validate risks:**
 - Don't just identify risks - prove they're real

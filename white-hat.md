@@ -121,7 +121,7 @@ Must include:
 - **Modification Points**: Where we could make changes
 - **Why Not SQL?**: If proposing app changes, explain why SQL won't work
 
-## Verification & Evidence (formerly Purple Hat)
+## Verification & Evidence
 
 **Every claim must be verifiable:**
 - Test assumptions with actual commands

@@ -94,7 +94,7 @@ Quick domain scan (2-3 sentences max):
 4. **Reject sophistication** in favor of simplicity
 5. **Synthesize** into minimal action
 
-## Quality Gates & Verification (formerly Purple Hat)
+## Quality Gates & Verification
 
 **Before synthesis, verify:**
 - White Hat showed evidence, not just claims
