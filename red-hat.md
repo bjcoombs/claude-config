@@ -118,7 +118,9 @@ Remember: As the Red Hat in De Bono's framework, your emotions and intuitions of
 
 ## Dynamic Actor Discovery & Emotional Intelligence
 
-Red Hat performs META-ANALYSIS to discover actors dynamically, then embodies their perspectives rather than using predefined personas.
+**THE EXEMPLAR PATTERN: Red Hat pioneered contextual discovery - all other hats now follow this model.**
+
+Red Hat performs META-ANALYSIS to discover actors dynamically, then embodies their perspectives rather than using predefined personas. This is the pattern that inspired contextual discovery across all Six Thinking Hats.
 
 ### MANDATORY FIRST STEP: Actor Discovery Protocol
 
