@@ -55,16 +55,22 @@ Once installed, the agents are available through Claude Code's Task system.
 ## Usage
 
 ### Agent Invocation
-```python
-# For comprehensive analysis, use Blue Hat to orchestrate all perspectives
-Task(subagent_type="blue-hat", prompt="Should we migrate our database to PostgreSQL?")
 
-# Or call specific hats directly for targeted analysis
-Task(subagent_type="white-hat", prompt="Analyze current database performance metrics")
-Task(subagent_type="black-hat", prompt="What could go wrong with this migration?")
+Simply ask Claude Code to use Blue Hat for comprehensive analysis:
+```python
+# Blue Hat automatically orchestrates all other hats as needed
+Task(subagent_type="blue-hat", prompt="Should we migrate our database to PostgreSQL?")
 ```
 
-### Typical Workflow
+Blue Hat knows about all the other hats and will automatically trigger them in the appropriate sequence based on the problem type.
+
+You can also call specific hats directly if you only need one perspective:
+```python
+Task(subagent_type="white-hat", prompt="What are the current database metrics?")
+Task(subagent_type="red-hat", prompt="How does the team feel about PostgreSQL?")
+```
+
+### How It Works
 1. Blue Hat receives the problem
 2. Determines optimal thinking sequence based on problem type
 3. Spawns appropriate hat agents (often in parallel)
