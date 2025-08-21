@@ -54,15 +54,12 @@ Once installed, the agents are available through Claude Code's Task system.
 
 ## Usage
 
-### Basic Analysis
-```bash
-# Trigger comprehensive analysis of a topic
-/6hats "Should we migrate our database to PostgreSQL?"
-```
-
-### Direct Agent Invocation
+### Agent Invocation
 ```python
-# Blue Hat automatically orchestrates, but you can also call specific hats
+# For comprehensive analysis, use Blue Hat to orchestrate all perspectives
+Task(subagent_type="blue-hat", prompt="Should we migrate our database to PostgreSQL?")
+
+# Or call specific hats directly for targeted analysis
 Task(subagent_type="white-hat", prompt="Analyze current database performance metrics")
 Task(subagent_type="black-hat", prompt="What could go wrong with this migration?")
 ```
