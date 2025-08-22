@@ -1,0 +1,13 @@
+# Ignore everything
+/*
+
+# But not these files and directories
+!/.gitignore
+!/agents/
+!/commands/
+
+# Still ignore .DS_Store files everywhere
+**/.DS_Store
+
+# Claude-specific files to ignore
+.claude/
