@@ -11,3 +11,5 @@
 
 # Claude-specific files to ignore
 .claude/
+CLAUDE.md
+**/CLAUDE.md

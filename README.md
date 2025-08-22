@@ -18,16 +18,53 @@ LLMs have different cognitive biases than humans:
 
 These agents correct for LLM-specific biases while maintaining the power of de Bono's original framework. Each iteration has been battle-tested through real-world use, incorporating learnings from where LLMs naturally struggle.
 
-## Installation
+## Repository Structure
 
-Place these agent files in your Claude Code agents folder:
+This repository uses a hybrid commands/agents architecture to work around Claude Code's architectural constraints:
 
-```bash
-# Clone or copy the agents to your Claude Code directory
-cp *.md ~/.claude/agents/
+```
+six-hats/
+├── README.md           # This file
+├── commands/          
+│   └── 6hats.md       # Orchestration command that calls agents
+└── agents/            
+    ├── white-hat.md   # Individual thinking hat agents
+    ├── red-hat.md
+    ├── black-hat.md
+    ├── yellow-hat.md
+    ├── green-hat.md
+    ├── blue-hat.md
+    └── scribe.md      # Documentation agent
 ```
 
-Once installed, the agents are available through Claude Code's Task system.
+### Why This Architecture?
+
+**Critical Limitation**: Agents in Claude Code cannot call other agents. This architectural constraint means:
+- No agent can orchestrate other agents directly
+- Blue Hat provides synthesis, not orchestration
+- Commands must handle all multi-agent coordination
+
+Our solution uses a **command-agent hybrid**:
+- The `/6hats` command acts as the orchestrator
+- Commands can call multiple agents in sequence
+- Each agent focuses solely on its specialized perspective
+- Blue Hat synthesizes results but doesn't coordinate execution
+
+## Installation
+
+Clone this repository to your Claude Code configuration directory:
+
+```bash
+# Clone the repository
+git clone git@github.com:senapt/six-hats.git ~/.claude/
+
+# Or if you already have a .claude directory, clone elsewhere and copy
+git clone git@github.com:senapt/six-hats.git /tmp/six-hats
+cp -r /tmp/six-hats/agents ~/.claude/
+cp -r /tmp/six-hats/commands ~/.claude/
+```
+
+Once installed, both the `/6hats` command and individual agents are available.
 
 ## The Agents
 
@@ -54,14 +91,7 @@ Once installed, the agents are available through Claude Code's Task system.
 
 ## Usage
 
-### CRITICAL: Architectural Constraint
-
-**Agents cannot call other agents in Claude Code.** This means:
-- The main Claude instance or commands must orchestrate all agents
-- Blue Hat provides synthesis, not orchestration
-- Use the `/6hats` command for full Six Thinking Hats analysis
-
-### Agent Invocation
+### Using the /6hats Command
 
 For comprehensive Six Thinking Hats analysis, use the `/6hats` command:
 ```bash
@@ -81,13 +111,29 @@ Task(subagent_type="red-hat", prompt="How does the team feel about PostgreSQL?")
 Task(subagent_type="blue-hat", prompt="Synthesize these perspectives: [provide input]")
 ```
 
+### Direct Agent Invocation
+
+You can also call specific hats directly when you need a particular perspective:
+```python
+Task(subagent_type="white-hat", prompt="What are the current database metrics?")
+Task(subagent_type="red-hat", prompt="How does the team feel about PostgreSQL?")
+Task(subagent_type="blue-hat", prompt="Synthesize these perspectives: [provide input]")
+```
+
 ### How It Actually Works
-1. `/6hats` command or main Claude receives the problem
-2. Orchestrator calls Red Hat for calibration
-3. Orchestrator calls appropriate hats based on complexity
-4. Each hat provides its specialized perspective
-5. Blue Hat synthesizes findings into actionable insights
-6. Scribe creates documentation if needed
+
+The command-agent architecture flows like this:
+
+1. **User invokes `/6hats` command** with a problem or question
+2. **Command orchestrates agents** (since agents can't call each other):
+   - Calls Red Hat for initial complexity calibration
+   - Determines appropriate sequence based on complexity
+   - Calls each hat agent in sequence
+3. **Each agent provides its perspective** independently
+4. **Blue Hat synthesizes** all perspectives into recommendations
+5. **Scribe creates documentation** if needed
+
+This architecture ensures clean separation of concerns while working within Claude Code's constraints.
 
 ## Example Output Structure
 
