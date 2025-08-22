@@ -54,26 +54,37 @@ Once installed, the agents are available through Claude Code's Task system.
 
 ## Usage
 
+### CRITICAL: Architectural Constraint
+
+**Agents cannot call other agents in Claude Code.** This means:
+- The main Claude instance or commands must orchestrate all agents
+- Blue Hat provides synthesis, not orchestration
+- Use the `/6hats` command for full Six Thinking Hats analysis
+
 ### Agent Invocation
 
-Simply ask Claude Code to use Blue Hat for comprehensive analysis:
-```python
-# Blue Hat automatically orchestrates all other hats as needed
-Task(subagent_type="blue-hat", prompt="Should we migrate our database to PostgreSQL?")
+For comprehensive Six Thinking Hats analysis, use the `/6hats` command:
+```bash
+/6hats "Should we migrate our database to PostgreSQL?"
 ```
 
-Blue Hat knows about all the other hats and will automatically trigger them in the appropriate sequence based on the problem type.
+The `/6hats` command will:
+1. Call Red Hat for initial complexity calibration
+2. Select appropriate sequence based on complexity
+3. Call each hat agent in sequence
+4. Call Blue Hat last for synthesis
 
-You can also call specific hats directly if you only need one perspective:
+You can also call specific hats directly:
 ```python
 Task(subagent_type="white-hat", prompt="What are the current database metrics?")
 Task(subagent_type="red-hat", prompt="How does the team feel about PostgreSQL?")
+Task(subagent_type="blue-hat", prompt="Synthesize these perspectives: [provide input]")
 ```
 
-### How It Works
-1. Blue Hat receives the problem
-2. Determines optimal thinking sequence based on problem type
-3. Spawns appropriate hat agents (often in parallel)
+### How It Actually Works
+1. `/6hats` command or main Claude receives the problem
+2. Orchestrator calls Red Hat for calibration
+3. Orchestrator calls appropriate hats based on complexity
 4. Each hat provides its specialized perspective
 5. Blue Hat synthesizes findings into actionable insights
 6. Scribe creates documentation if needed
