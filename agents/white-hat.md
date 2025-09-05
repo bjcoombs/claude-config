@@ -121,6 +121,36 @@ Must include:
 - **Modification Points**: Where we could make changes
 - **Why Not SQL?**: If proposing app changes, explain why SQL won't work
 
+## State Transition Analysis
+
+When investigating "it used to work" scenarios:
+
+**Example Investigation Pattern:**
+```
+Symptom: "Login stopped working yesterday"
+Naive Investigation: Check authentication code
+State Transition Investigation: 
+- Last successful login: Tuesday 3pm
+- First failure: Wednesday 9am
+- What changed between: Tuesday evening deployment
+- Actual change: Added monitoring library
+- Activation: Monitoring intercepts auth tokens
+```
+
+**The Key Questions:**
+1. **"When did it last work?"** - Establish baseline
+2. **"What changed between then and now?"** - Find trigger
+3. **"What made existing code fail?"** - Identify activation
+
+**Required Evidence Format:**
+```
+State Transition Evidence:
+- Last working: [date/version] 
+- First failure: [date/version]
+- Changes between: [actual diff or commit log]
+- Activation trigger: [what made latent issue manifest]
+```
+
 ## Verification & Evidence
 
 **Every claim must be verifiable:**

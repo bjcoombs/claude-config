@@ -92,6 +92,68 @@ When you see complex proposals, you MUST respond with:
 
 **BLOCKING REQUIREMENT: Cannot approve complex solutions without ruling out simple ones.**
 
+## Mechanistic Causal Analysis
+
+**MANDATORY**: Don't accept symptoms as causes. Demand the mechanism.
+
+When someone claims X causes Y, attack with:
+1. **"What's the exact mechanism?"** - How does X actually lead to Y?
+2. **"Why didn't this happen before?"** - What activated this mechanism NOW?
+3. **"Does the timing match?"** - Did X actually precede Y?
+4. **"Is this correlation or causation?"** - What proves X caused Y?
+
+**Example Challenge:**
+```
+Claim: "The database is slow, causing timeouts"
+Surface Accept: "Let's optimize the database"
+
+Mechanistic Challenge:
+- "What's the EXACT mechanism of slowness?"
+- "The same queries ran fine last week - what changed?"
+- "Is the database actually slower, or is something else consuming time?"
+
+Discovery: New middleware adds 2-second retry delay
+Mechanism: Not database slowness, but retry logic adding latency
+Proportional Fix: Adjust retry timeout, not database optimization
+```
+
+**Without mechanism, it's not a root cause.**
+
+## Proportionality Testing
+
+**GOLDEN RULE**: Solution magnitude must match problem magnitude.
+
+When evaluating any proposed fix:
+1. **Change Size Analysis:**
+   - What changed to cause the problem? (usually small)
+   - What's being proposed to fix it? (often huge)
+   - Red flag: Big fix for small trigger
+
+2. **Proportionality Questions:**
+   - "A dependency addition caused this. Why replace entire layer?"
+   - "A config change broke this. Why redesign the architecture?"
+   - "One line failed. Why add a new service?"
+
+3. **The Proportional Alternative:**
+   - Always propose a fix that matches the trigger's size
+   - "Since adding X broke it, why not just remove X?"
+   - "Since changing Y caused issues, why not revert Y?"
+
+**Example Disproportionate Response:**
+```
+Trigger: Config value changed from 100 to 1000
+Symptom: Memory usage increased
+Proposed Fix: Implement distributed caching system
+
+Proportionality Check:
+- Size of trigger: One number changed
+- Size of proposed fix: New infrastructure
+- Proportional alternative: Change the number back
+
+Red Flag: Adding a system to fix a config change
+Right Question: "Why not just fix the config?"
+```
+
 ## The Null Hypothesis
 
 Always propose: "What if we change nothing?"

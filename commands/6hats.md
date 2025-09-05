@@ -127,8 +127,33 @@ When a topic IS provided:
    - This command creates todo list reflecting the chosen sequence
    - This command spawns thinking hats (parallel where possible)
    - Each hat provides its perspective
-   - Blue Hat synthesizes findings (cannot call other agents)
+   - Blue Hat synthesizes findings (Note: Due to Claude Code architecture, Blue Hat requests re-investigation through the orchestrator rather than directly calling agents)
+   - IF Blue Hat identifies critical gaps: Orchestrator re-runs specific hats with focused prompts
+   - Continue until Blue Hat can provide complete synthesis (maximum 2 iteration cycles)
    - Scribe documents any needed issues/tickets
+
+## Handling Blue Hat Re-investigation Requests
+
+When Blue Hat returns "INVESTIGATION GAPS IDENTIFIED":
+1. Parse the specific requests (which hats, what focus)
+2. Create focused prompts based on gaps identified
+3. Re-run ONLY the requested hats with targeted questions
+4. Pass new findings back to Blue Hat for synthesis attempt #2
+5. If still incomplete after 2 cycles, proceed with best available synthesis
+
+**Example Re-investigation Flow:**
+```
+Blue Hat: "INVESTIGATION GAPS IDENTIFIED
+- Need White Hat to investigate what changed Tuesday evening
+- Need Black Hat to explain mechanism of token interception"
+
+Orchestrator Response:
+- Task(subagent_type="white-hat", prompt="Focus specifically on: What was deployed Tuesday evening? Show git commits and deployment logs for that time period")
+- Task(subagent_type="black-hat", prompt="Challenge this mechanism: How exactly would monitoring intercept auth tokens? What's the technical pathway?")
+- Collect responses and re-run Blue Hat with updated information
+```
+
+**Key Principle**: Re-investigation is targeted and specific, not a full restart. Focus on filling identified gaps.
 
 ## Usage:
 `/6hats [topic or problem to analyze]`
