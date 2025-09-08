@@ -89,6 +89,69 @@ While De Bono designed for serial human meetings, AI enables parallel thinking:
 - **Hybrid Mode**: Strategic mix of parallel and serial thinking
 - **Blue Hat**: Orchestrates optimal execution flow
 
+## Thinking Level Integration
+
+The orchestrator dynamically assigns thinking levels to each hat based on problem complexity and cognitive demands. This leverages Claude Code's ability to allocate different computational depths through trigger words.
+
+### Thinking Level Triggers
+- **Baseline**: No prefix (fast, intuitive responses)
+- **"think"**: Extended thinking for moderate complexity
+- **"think hard"**: Deep analysis for complex patterns
+- **"think harder"**: Intensive exploration for difficult problems
+- **"ultrathink"**: Maximum computational depth for wicked problems
+
+### Complexity-Based Default Levels
+
+**Simple Problems (facts + risks + synthesis):**
+- White Hat: baseline (facts are facts)
+- Black Hat: "think" (basic risk assessment)
+- Blue Hat: "think" (simple synthesis)
+
+**Moderate Problems (standard analysis):**
+- White Hat: "think" (deeper fact patterns)
+- Red Hat: baseline (keep intuition fast)
+- Black Hat: "think hard" (thorough critical analysis)
+- Yellow Hat: "think" (opportunity identification)
+- Green Hat: "think hard" (creative exploration)
+- Blue Hat: "think hard" (complex synthesis)
+
+**Complex Problems (full depth needed):**
+- White Hat: "think hard" (complex investigations)
+- Red Hat: "think" (nuanced emotional landscape)
+- Black Hat: "think harder" (deep mechanistic analysis)
+- Yellow Hat: "think hard" (hidden opportunity discovery)
+- Green Hat: "ultrathink" (maximum creative exploration)
+- Blue Hat: "think harder" (multi-perspective synthesis)
+
+### Domain-Specific Overrides
+
+**Technical Debugging:**
+- White Hat: "think harder" (find exact code and state transitions)
+- Black Hat: "ultrathink" (mechanistic root cause critical)
+- Green Hat: "think" (simple fixes preferred)
+
+**Creative Innovation:**
+- Green Hat: "ultrathink" (maximum exploration space)
+- Yellow Hat: "think harder" (opportunity multiplication)
+- Black Hat: "think" (don't over-critique innovation)
+
+**Risk Assessment:**
+- Black Hat: "ultrathink" (exhaustive critical analysis)
+- White Hat: "think harder" (comprehensive evidence)
+- Yellow Hat: baseline (quick opportunity scan)
+
+### Adaptive Thinking Escalation
+
+When Blue Hat identifies investigation gaps:
+1. Escalate thinking one level up from initial
+2. For critical gaps, jump directly to "ultrathink"
+3. Include focused prompts with elevated thinking
+
+Example:
+- Initial: White Hat with "think"
+- Gap found: Missing state transition
+- Re-run: White Hat with "think harder about the exact moment of failure"
+
 ## Instructions for Claude:
 
 **CRITICAL ARCHITECTURAL NOTE**: Agents cannot call other agents in Claude Code. This command acts as the orchestrator, calling each hat directly. Blue Hat provides synthesis, not orchestration.
@@ -106,8 +169,9 @@ When a topic IS provided:
    - Detect and reframe limited choice presentations (2-4 options)
    - Consider domain-specific aspects that affect approach
    - Select appropriate sequence based on assessment
-   - Create a TodoWrite list defining which hats to use
-   - Call each thinking hat agent using Task(subagent_type="hat-name")
+   - Determine thinking levels for each hat based on complexity
+   - Create a TodoWrite list defining which hats to use and their thinking levels
+   - Call each thinking hat agent using Task(subagent_type="hat-name") with appropriate thinking prefix
    - Call Blue Hat last for synthesis of all perspectives
    - Reject sophistication in favor of simplicity
    - Adapt the process based on discoveries during analysis
@@ -124,33 +188,72 @@ When a topic IS provided:
    - FIRST: Internal assessment - is complexity clear or uncertain?
    - IF UNCERTAIN: Call Red Hat for gut assessment and calibration
    - OTHERWISE: Use judgment to select appropriate sequence
-   - This command creates todo list reflecting the chosen sequence
-   - This command spawns thinking hats (parallel where possible)
+   - This command creates todo list reflecting the chosen sequence and thinking levels
+   - This command spawns thinking hats (parallel where possible) with appropriate thinking prefixes
    - Each hat provides its perspective
    - Blue Hat synthesizes findings (Note: Due to Claude Code architecture, Blue Hat requests re-investigation through the orchestrator rather than directly calling agents)
-   - IF Blue Hat identifies critical gaps: Orchestrator re-runs specific hats with focused prompts
+   - IF Blue Hat identifies critical gaps: Orchestrator re-runs specific hats with elevated thinking levels
    - Continue until Blue Hat can provide complete synthesis (maximum 2 iteration cycles)
    - Scribe documents any needed issues/tickets
+
+## Thinking Level Prompt Construction
+
+When calling agents, prepend the appropriate thinking trigger to the prompt:
+
+**Baseline (no prefix):**
+```
+Task(subagent_type="red-hat", 
+     prompt="What's your gut reaction to implementing rate limiting?")
+```
+
+**"think" level:**
+```
+Task(subagent_type="white-hat",
+     prompt="Think about the current implementation and investigate...")
+```
+
+**"think hard" level:**
+```
+Task(subagent_type="black-hat",
+     prompt="Think hard about the risks and failure modes of...")
+```
+
+**"think harder" level:**
+```
+Task(subagent_type="green-hat",
+     prompt="Think harder about creative alternatives beyond the obvious...")
+```
+
+**"ultrathink" level:**
+```
+Task(subagent_type="green-hat",
+     prompt="Ultrathink: Explore every possible solution dimension for...")
+```
+
+**Key Principle**: The thinking level is embedded naturally in the prompt text, not as a separate parameter.
 
 ## Handling Blue Hat Re-investigation Requests
 
 When Blue Hat returns "INVESTIGATION GAPS IDENTIFIED":
 1. Parse the specific requests (which hats, what focus)
-2. Create focused prompts based on gaps identified
-3. Re-run ONLY the requested hats with targeted questions
-4. Pass new findings back to Blue Hat for synthesis attempt #2
-5. If still incomplete after 2 cycles, proceed with best available synthesis
+2. Escalate thinking levels (one level up or jump to "ultrathink" for critical gaps)
+3. Create focused prompts with elevated thinking
+4. Re-run ONLY the requested hats with targeted questions
+5. Pass new findings back to Blue Hat for synthesis attempt #2
+6. If still incomplete after 2 cycles, proceed with best available synthesis
 
-**Example Re-investigation Flow:**
+**Example Re-investigation Flow with Thinking Escalation:**
 ```
 Blue Hat: "INVESTIGATION GAPS IDENTIFIED
 - Need White Hat to investigate what changed Tuesday evening
 - Need Black Hat to explain mechanism of token interception"
 
-Orchestrator Response:
-- Task(subagent_type="white-hat", prompt="Focus specifically on: What was deployed Tuesday evening? Show git commits and deployment logs for that time period")
-- Task(subagent_type="black-hat", prompt="Challenge this mechanism: How exactly would monitoring intercept auth tokens? What's the technical pathway?")
-- Collect responses and re-run Blue Hat with updated information
+Orchestrator Response (with escalated thinking):
+- Task(subagent_type="white-hat", 
+       prompt="Think harder about this: What was deployed Tuesday evening? Show git commits and deployment logs for that exact time period")
+- Task(subagent_type="black-hat", 
+       prompt="Ultrathink: Challenge this mechanism - How exactly would monitoring intercept auth tokens? What's the precise technical pathway?")
+- Collect responses and re-run Blue Hat with "think harder" for complex synthesis
 ```
 
 **Key Principle**: Re-investigation is targeted and specific, not a full restart. Focus on filling identified gaps.
