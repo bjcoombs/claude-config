@@ -2,6 +2,10 @@
 
 A comprehensive analysis framework using Edward de Bono's Six Thinking Hats methodology, implemented through parallel agent orchestration.
 
+## Architecture: Independent Agent Orchestration
+
+Six Hats operates through Claude Code's architectural design where commands orchestrate multiple independent agents. Each agent focuses on its specialty without dependencies. See [ARCHITECTURE.md](../ARCHITECTURE.md) for technical implementation details.
+
 ## Implementation Cookbook
 
 ### Recipe: Six Hats Analysis
@@ -243,7 +247,10 @@ Example:
 
 ### Your Role as Orchestrator
 
-You are the main Claude instance coordinating multiple independent agents. Your responsibilities:
+You are the main Claude instance coordinating multiple independent agents. 
+(Agents are designed for independence - orchestration happens at command level)
+
+Your responsibilities:
 
 1. **Assess the problem** to determine complexity and appropriate sequence
 2. **Create a task plan** using TodoWrite to track progress
