@@ -2,6 +2,52 @@
 
 Perform a comprehensive analysis using Edward de Bono's Six Thinking Hats methodology.
 
+## ⚠️ CRITICAL IMPLEMENTATION WARNING ⚠️
+
+**NEVER invoke this command through a general-purpose agent!**
+
+### ❌ WRONG (Creates Simulation):
+```python
+# This causes ONE agent to simulate all perspectives - INTELLECTUAL FRAUD!
+Task(subagent_type="general-purpose", prompt="Run /6hats on topic X")
+```
+
+### ✅ CORRECT (Creates Orchestration):
+```python
+# Main Claude directly orchestrates multiple independent agents
+Task(subagent_type="white-hat", prompt="Think about facts regarding X...")
+Task(subagent_type="red-hat", prompt="What's your gut reaction to X...")
+Task(subagent_type="black-hat", prompt="Think hard about risks in X...")
+# ... etc for each hat
+```
+
+**The difference between simulation (one mind pretending) and orchestration (multiple minds collaborating) is the ENTIRE VALUE of Six Hats. If you cannot spawn actual separate agents, DO NOT use this framework.**
+
+## Common Implementation Failures to Avoid
+
+### 🚫 Single-Agent Simulation (WRONG):
+```
+"Let me think through each hat perspective..."
+"From a White Hat perspective, I see..."
+"Wearing my Black Hat, the risks are..."
+"As the Green Hat would say..."
+```
+**This is theatrical role-playing, not Six Hats!**
+
+### 🚫 Sequential Contamination (WRONG):
+```
+"Based on what White Hat found, Black Hat thinks..."
+"Building on Black Hat's concerns, Yellow Hat sees..."
+```
+**Each hat must think independently without knowing what others said!**
+
+### 🚫 General-Purpose Delegation (WRONG):
+```python
+Task(subagent_type="general-purpose", 
+     prompt="Please run the Six Hats analysis on X")
+```
+**This guarantees simulation instead of orchestration!**
+
 ## Six Hats Sequences for Different Problem Types
 
 The orchestrator selects the appropriate sequence based on Red Hat's initial calibration:
@@ -156,6 +202,19 @@ Example:
 
 **CRITICAL ARCHITECTURAL NOTE**: Agents cannot call other agents in Claude Code. This command acts as the orchestrator, calling each hat directly. Blue Hat provides synthesis, not orchestration.
 
+### 🚨 MANDATORY IMPLEMENTATION RULES 🚨
+
+1. **YOU (Main Claude) MUST orchestrate directly** - Do NOT delegate to general-purpose agent
+2. **Each hat MUST be a separate Task() call** with specific subagent_type (white-hat, red-hat, etc.)
+3. **NEVER simulate perspectives** - If you catch yourself thinking "as the White Hat would say..." STOP!
+4. **Actual agents or nothing** - If you cannot spawn real agents, refuse to run the analysis
+
+### Implementation Checklist:
+- [ ] Am I (main Claude) orchestrating directly? 
+- [ ] Am I calling Task(subagent_type="white-hat") NOT Task(subagent_type="general-purpose")?
+- [ ] Will each hat be a genuinely independent agent with fresh context?
+- [ ] Am I avoiding any simulation or role-playing?
+
 **IMPORTANT: If no topic is provided, ASK the user what they want to analyze rather than using the example.**
 
 When a topic IS provided:
@@ -263,6 +322,36 @@ Orchestrator Response (with escalated thinking):
 
 ## Example:
 `/6hats database query performance issue causing timeouts`
+
+## Correct Implementation Example:
+
+When user types `/6hats API rate limiting strategy`, main Claude should:
+
+```python
+# 1. Create orchestration plan
+TodoWrite([
+    "White Hat: Investigate current API usage facts",
+    "Black Hat: Identify risks and failure modes", 
+    "Green Hat: Generate creative solutions",
+    "Blue Hat: Synthesize findings"
+])
+
+# 2. Spawn ACTUAL agents (not simulation!)
+white_result = Task(subagent_type="white-hat", 
+                    prompt="Think about the facts: What are the current API usage patterns, limits, and constraints?")
+
+black_result = Task(subagent_type="black-hat",
+                    prompt="Think hard about risks: What could go wrong with rate limiting? What are the failure modes?")
+
+green_result = Task(subagent_type="green-hat",
+                    prompt="Think harder about creative solutions for API rate limiting beyond obvious approaches")
+
+# 3. Pass all results to Blue Hat for synthesis
+blue_result = Task(subagent_type="blue-hat",
+                   prompt=f"Think hard to synthesize these findings:\n{white_result}\n{black_result}\n{green_result}")
+```
+
+**Key Point**: Each Task() creates a SEPARATE agent process with independent thinking.
 
 ## No Arguments Behavior:
 If called without arguments, respond with:
