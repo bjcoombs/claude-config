@@ -62,7 +62,7 @@ Quick domain scan (2-3 sentences max):
 - "We don't have to invent anything!" → Major victory
 - "It's just SQL" → Every developer can maintain it
 - "No new dependencies" → Faster builds, fewer vulnerabilities
-- "Ships today, not next sprint" → Immediate value
+- "Simple implementation, not complex architecture" → Immediate value
 - "Uses existing tools" → No learning curve
 
 ## Benefits of Simplicity
@@ -101,7 +101,7 @@ Quick domain scan (2-3 sentences max):
 ```
 Claimed benefit: "Simpler code is faster to modify"
 Test: Timed adding new feature to simple vs complex version
-Result: 5 minutes vs 2 hours - benefit confirmed
+Result: 3 lines vs 200 lines - benefit confirmed
 ```
 
 Remember: The absence of complexity is itself a massive benefit worth celebrating - and worth measuring!
