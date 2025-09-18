@@ -258,38 +258,37 @@ Your responsibilities:
 4. **Collect results** from each independent agent
 5. **Pass combined results** to blue-hat for synthesis
 
-### Implementation Guide
+### Implementation Approach
 
-When the user provides a topic for analysis:
-#### Phase 1: Complexity Assessment
-Evaluate the problem's complexity to determine the optimal agent sequence:
-- Simple problems: Use White → Black → Blue sequence
-- Moderate complexity: Deploy standard five-hat sequence
-- Complex problems: Engage all six hats with elevated thinking levels
-- Uncertain complexity: Call Red Hat for intuitive assessment
+When analyzing a topic:
 
-#### Phase 2: Task Planning
-Create a TodoWrite list documenting your orchestration plan:
+#### Assess Complexity
+Use your judgment to determine which agents would provide value:
+- Simple problems might need just facts and risks (White, Black)
+- Complex problems benefit from multiple perspectives
+- Trust your intuition about which viewpoints matter
+
+#### Optional: Track with TodoWrite
+If helpful for organizing thoughts (not required):
 ```python
 TodoWrite([
-    {"content": "White Hat: Investigate facts", "status": "pending"},
-    {"content": "Black Hat: Analyze risks", "status": "pending"},
-    {"content": "Blue Hat: Synthesize findings", "status": "pending"}
+    {"content": "Get facts", "status": "pending"},
+    {"content": "Assess risks", "status": "pending"},
+    {"content": "Find opportunities", "status": "pending"}
 ])
 ```
 
-#### Phase 3: Agent Deployment
-Spawn agents using Task() with appropriate thinking prefixes:
-- Baseline: Direct prompt without prefix
-- Extended thinking: Prepend "Think about..."
-- Deep analysis: Prepend "Think hard about..."
-- Maximum depth: Prepend "Think harder about..." or "Ultrathink:"
+#### Call Relevant Agents
+Spawn agents that make sense for the problem. Adjust thinking depth as needed:
+- Default: Direct prompt
+- Deeper analysis: Add "Think about..." or "Think hard about..."
+- Maximum depth: "Think harder about..." or "Ultrathink:"
 
-#### Phase 4: Result Collection
-Gather outputs from each agent, maintaining their independence and unique perspectives.
+#### Gather Insights
+Collect perspectives from whichever agents you called.
 
-#### Phase 5: Synthesis
-Pass all collected perspectives to blue-hat for final synthesis and recommendations.
+#### Synthesize Understanding
+Combine the insights into actionable recommendations.
 
 ### Adaptive Refinement
 
@@ -404,9 +403,9 @@ This iterative refinement ensures comprehensive analysis while maintaining agent
 When user types `/6hats API rate limiting strategy`, execute this recipe:
 
 ```python
-# Phase 1: Assess (internal evaluation determines moderate complexity)
+# Assess complexity (pull when ready to start)
 
-# Phase 2: Plan
+# Queue tasks in TodoWrite
 TodoWrite([
     {"content": "White Hat: Investigate API usage facts", "status": "pending"},
     {"content": "Black Hat: Identify rate limiting risks", "status": "pending"},
@@ -415,7 +414,7 @@ TodoWrite([
     {"content": "Blue Hat: Synthesize findings", "status": "pending"}
 ])
 
-# Phase 3: Deploy Agents
+# Deploy agents (continuous flow)
 white_result = Task(
     subagent_type="white-hat",
     prompt="Think about the facts: Current API usage patterns, peak loads, client distribution, and existing limits."
@@ -436,10 +435,10 @@ green_result = Task(
     prompt="Think harder about creative rate limiting approaches beyond standard token buckets."
 )
 
-# Phase 4: Collect Results
+# Collect results as they flow in
 # (Results gathered automatically from Task returns)
 
-# Phase 5: Synthesize
+# Synthesize when all complete
 synthesis = Task(
     subagent_type="blue-hat",
     prompt=f"""Think hard to synthesize these independent analyses:

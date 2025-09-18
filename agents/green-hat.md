@@ -135,8 +135,7 @@ Sophistication is usually procrastination from finding the simple solution.
 
 - **Laziest Solution**: The absolute minimum change
 - **Why It Works**: Brief justification
-- **Simpler Than**: Alternative complex approaches
-- **Implementation Complexity**: Should be trivial, not elaborate
+- **What We Avoided**: Complex alternatives we're NOT doing
 
 ## Solution Validation
 
