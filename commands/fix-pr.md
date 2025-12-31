@@ -1,0 +1,90 @@
+# Fix PR Autonomously
+
+Enter autonomous PR fixing loop for the current branch's PR until all checks pass.
+
+## Protocol
+
+1. **Initial Check** (Iteration 0):
+   - Get current PR number
+   - Check CI status
+   - Check inline comments (CodeRabbit, bots)
+   - Check conversation comments
+   - Report findings
+
+2. **Autonomous Loop** (DO NOT ask for permission):
+   - **If ANY issues exist** (failures or bot comments):
+     - Analyze root cause
+     - Implement fixes
+     - Commit with descriptive message
+     - Push changes
+     - Wait 30 seconds for CI
+     - Report: "🔄 Iteration N: Fixed X issues"
+     - Check status again (GOTO step 2)
+   
+   - **If ALL passing and NO bot comments**:
+     - Report: "✅ PR #X: All checks passing, ready for human review"
+     - Include final status footer
+     - STOP
+
+3. **Only ask for help if**:
+   - Genuinely blocked (cannot resolve after trying)
+   - After 5+ iterations with no progress
+   - Need design decision from user
+
+## Example Output Format
+
+```
+🔄 Iteration 1: Checking PR #123...
+   ❌ CI: TypeScript errors in user.service.ts
+   ❌ CodeRabbit: Missing error handling in auth.ts (line 45)
+   Analyzing and fixing...
+   
+   *commits and pushes*
+
+🔄 Iteration 2: Checking PR #123...
+   ✅ CI: All checks passing
+   ❌ CodeRabbit: Async/await pattern in payment.ts (line 89)
+   Fixing...
+   
+   *commits and pushes*
+
+🔄 Iteration 3: Checking PR #123...
+   ✅ CI: All checks passing
+   ✅ No unresolved comments
+
+✅ PR #123: All checks passing, ready for your review!
+
+---
+## 📍 Current Work
+
+🔗 **PR**: #123 - Add payment processing
+   https://github.com/org/repo/pull/123
+
+📊 **Latest**: All checks passing after 3 autonomous iterations
+```
+
+## Commands to Use
+
+```bash
+# Get PR info
+gh pr view --json number,title,statusCheckRollup
+
+# Check CI failures
+gh pr checks <number> --json name,conclusion | jq '.[] | select(.conclusion == "FAILURE")'
+
+# Check inline comments
+gh api repos/{owner}/{repo}/pulls/<number>/comments | jq '[.[] | select(.user.login | test("bot"; "i"))]'
+
+# Check conversation comments  
+gh pr view <number> --comments
+
+# View failed CI logs
+gh run view <run-id> --log-failed
+```
+
+## Important
+
+- **NO permission needed** between iterations - keep looping
+- **Be transparent** - show each iteration's findings and fixes
+- **Stop criteria**: ALL checks green AND NO bot comments
+- **Max iterations**: 10 (ask for help after that)
