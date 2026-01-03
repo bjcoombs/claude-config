@@ -1,9 +1,19 @@
 ---
-description: Start work on a Task Master task - orchestrator pattern with subagents
-argument-hint: <tag> <task-id> (e.g., "458-service 1.2") or just <task-id> if tag is already set
+description: "[DEPRECATED] Use /tm instead - unified Task Master command"
+argument-hint: <tag> <task-id>
 ---
 
-# Task Master Start (Orchestrator Pattern)
+# DEPRECATED - Use /tm
+
+This command has been merged into `/tm` which auto-detects context.
+
+**Migration:**
+- `/tms 458-service 1.2` → `/tm 458-service 1.2`
+- Run `/tm` from anywhere - it figures out what to do
+
+---
+
+# Legacy Documentation (for reference)
 
 Start working on Task Master task: **$ARGUMENTS**
 

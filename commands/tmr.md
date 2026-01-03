@@ -1,10 +1,19 @@
 ---
-description: Review and polish a Task Master PR - assess state, address feedback
-argument-hint: [pr-ref] (optional - #123 or URL to recover orphaned PR)
-allowed-tools: Bash(task-master:*), Bash(git:*), Bash(gh:*), Bash(pwd:*), Bash(basename:*), Bash(dirname:*), Task, TodoWrite
+description: "[DEPRECATED] Use /tm instead - unified Task Master command"
+argument-hint: [pr-ref]
 ---
 
-# Task Master Review
+# DEPRECATED - Use /tm
+
+This command has been merged into `/tm` which auto-detects context.
+
+**Migration:**
+- `/tmr` → `/tm` (run from worktree, it detects PR state)
+- `/tmr #123` → Still use `/tmr #123` for orphan PR recovery (keeping this path)
+
+---
+
+# Legacy Documentation (for reference)
 
 Review a PR: assess its state and address any feedback. Also handles cleanup after merge.
 
