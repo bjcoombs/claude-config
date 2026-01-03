@@ -31,26 +31,18 @@ This command uses an orchestrator + subagent pattern to:
 - Use Task Master subtasks as work breakdown
 - Enable longer-running complex tasks without context exhaustion
 
-## Task Status Lifecycle (CRITICAL)
+## Task Status Lifecycle
 
 ```
-/tms starts     → Task status: pending → in-progress
-Implementation  → Subtask statuses: pending → done (each subtask)
-ALL SUBTASKS DONE → Task status: STAYS in-progress ⚠️
-PR created      → Task status: STAYS in-progress
-Quality loop    → Task status: STAYS in-progress
-/tms ends       → Task status: STILL in-progress (awaiting human merge)
-Human merges PR → Task status: unchanged (human action, no command)
-/tmr after merge → Task status: in-progress → done (ONLY here!)
+/tms starts      → Parent: pending → in-progress
+Implementation   → Subtasks: pending → review (code complete)
+All subtasks     → Parent: STAYS in-progress (review doesn't trigger auto-done)
+PR created       → Parent: STAYS in-progress
+Human merges PR  → (no command runs)
+/tm after merge  → Parent: in-progress → done
 ```
 
-**⚠️ CRITICAL: "All subtasks done" ≠ "Parent task done"**
-
-The parent task stays `in-progress` until:
-1. Human merges the PR
-2. User runs `/tmr` which detects merge and marks done
-
-**NEVER mark the parent task as `done` during /tms - even when all subtasks complete.**
+**Key**: Use `review` for subtasks, not `done`. The `review` status doesn't trigger parent auto-adjustment.
 
 ---
 
@@ -166,8 +158,6 @@ Acceptance Criteria: <acceptance-criteria>
 
 Implement, test, commit.
 
-FORBIDDEN: `task-master set-status --id=<parent> --status=done` - NEVER run this.
-
 If this subtask is too large (losing track, context overwhelming), STOP and report:
 - What's done so far
 - What remains
@@ -182,7 +172,7 @@ Report 2-3 sentence summary when done.
 
 4. **Update subtask status**:
 ```bash
-task-master set-status --id=<task-id>.<subtask-id> --status=done
+task-master set-status --id=<task-id>.<subtask-id> --status=review
 ```
 
 5. **Add implementation notes**:
@@ -211,7 +201,6 @@ Description: <task-description>
 
 Implement, test, commit.
 
-FORBIDDEN: `task-master set-status --id=<task> --status=done` - NEVER run this.
 """
 )
 ```

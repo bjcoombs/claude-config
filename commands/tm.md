@@ -116,14 +116,12 @@ Description: <subtask-description>
 
 Implement, test, commit.
 
-FORBIDDEN: `task-master set-status --id=<parent> --status=done` - NEVER run this.
-
 If too large, STOP and report what's done/remaining.
 """
 )
 ```
 
-After each subtask: `task-master set-status --id=<task-id>.<subtask-id> --status=done`
+After each subtask: `task-master set-status --id=<task-id>.<subtask-id> --status=review`
 
 **If no subtasks** → single implementation subagent.
 
@@ -325,18 +323,32 @@ Continue implementation. Same as START Step 4-6.
 
 ---
 
+## Task Status Semantics
+
+| Status      | Meaning                                   |
+|-------------|-------------------------------------------|
+| pending     | Not started                               |
+| in-progress | Currently being worked on                 |
+| review      | Implementation complete, PR pending merge |
+| done        | PR merged, work verified and complete     |
+| blocked     | Cannot proceed due to external dependency |
+| deferred    | Postponed for later                       |
+| cancelled   | Will not be done                          |
+
+**Key insight**: `review` status does NOT trigger parent auto-adjustment. This allows subtasks to be marked complete without prematurely marking the parent done.
+
 ## Task Status Lifecycle
 
 ```
 /tm starts (START)  → Task: pending → in-progress
-Implementation      → Subtasks: pending → done
-All subtasks done   → Task: STAYS in-progress ⚠️
-PR created/polished → Task: STAYS in-progress
+Implementation      → Subtasks: pending → review (code complete)
+All subtasks review → Parent: STAYS in-progress (no auto-adjustment)
+PR created/polished → Parent: STAYS in-progress
 Human merges PR     → (no command runs)
-/tm after merge     → Task: in-progress → done
+/tm after merge     → Parent: in-progress → done
 ```
 
-**CRITICAL**: Parent task only marked `done` in CLEANUP mode after human merge.
+**Never mark subtasks `done` individually** - just set parent to `done` after PR merge.
 
 ---
 
