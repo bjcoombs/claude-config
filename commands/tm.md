@@ -13,6 +13,29 @@ argument-hint: [tag task-id] (optional - derives context from worktree if omitte
 
 ## Phase 0: Detect Context
 
+**Priority order:**
+
+1. **Conversation context** - Recent "📍 Current Work" footer with active task/PR?
+2. **Current directory** - pwd matches TM worktree pattern?
+3. **Arguments** - Explicit tag/task-id provided?
+
+### Step 0.1: Check Conversation Context First
+
+Before checking pwd, notice if recent messages show active TM work:
+- Recent "📍 Current Work" footer with PR/task and worktree path?
+- Just pushed/created a PR?
+- Just reported "ready for review"?
+
+**If conversation shows active work but pwd is NOT that worktree:**
+```bash
+# cd to the worktree shown in the footer
+cd ~/dev/github.com/<org>/<repo>/worktree/<tag>/<task-id>--<slug>
+```
+
+Then proceed with worktree mode checks.
+
+### Step 0.2: Check Current Directory
+
 ```bash
 pwd
 git branch --show-current 2>/dev/null || echo "NOT_GIT"
