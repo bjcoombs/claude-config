@@ -13,7 +13,7 @@ Personal Claude Code configuration, customizations, and workflow tools.
 
 ### Task Master Commands
 
-Workflow commands for managing tasks with [Task Master](https://github.com/eyecuelab/task-master-ai):
+Workflow commands for managing tasks with [Task Master](https://github.com/eyaltoledano/claude-task-master):
 
 | Command | Description |
 |---------|-------------|
