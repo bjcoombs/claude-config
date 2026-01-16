@@ -11,9 +11,6 @@ Workflow commands for managing tasks with [Task Master](https://github.com/eyecu
 | Command | Description |
 |---------|-------------|
 | `/tm` | Unified context-aware command - starts, reviews, or cleans up tasks based on current state |
-| `/tms` | (Deprecated) Use `/tm` instead |
-| `/tmr` | (Deprecated) Use `/tm` instead |
-| `/tms-legacy` | Legacy monolithic start command |
 
 The `/tm` command detects context automatically:
 - **Not in worktree** → Start mode (begin next task or specified task)
@@ -42,9 +39,6 @@ claude-config/
 ├── CLAUDE.md           # Personal guidelines and instructions
 ├── commands/
 │   ├── tm.md           # Task Master unified command
-│   ├── tms.md          # (deprecated)
-│   ├── tmr.md          # (deprecated)
-│   ├── tms-legacy.md
 │   ├── 6hats.md        # Six Hats orchestration
 │   └── ...
 └── agents/

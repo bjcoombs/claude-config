@@ -256,11 +256,38 @@ Next: `task-master next --tag <tag>` or `/tm <tag> <next-task>`
 
 ### Mode: REVIEW (PR Open)
 
-**Check states in priority order:**
+**Step 1: Check for merge conflicts FIRST**
+
+```bash
+# Get PR state including mergeable status
+PR_STATE=$(gh pr view --json mergeable,mergeStateStatus,baseRefName)
+MERGEABLE=$(echo "$PR_STATE" | jq -r '.mergeable')
+MERGE_STATUS=$(echo "$PR_STATE" | jq -r '.mergeStateStatus')
+BASE=$(echo "$PR_STATE" | jq -r '.baseRefName')
+
+# CONFLICTING or UNKNOWN means we need to resolve
+if [[ "$MERGEABLE" == "CONFLICTING" ]] || [[ "$MERGE_STATUS" == "DIRTY" ]]; then
+  echo "⚠️ MERGE CONFLICT DETECTED - resolving first"
+fi
+```
+
+**If conflicts exist, resolve BEFORE anything else:**
+```bash
+git fetch origin
+git merge origin/$BASE --no-edit
+# If merge fails with conflicts:
+#   1. Resolve conflicts in affected files
+#   2. git add <resolved-files>
+#   3. git commit (accept merge message)
+#   4. git push
+# Then re-run /tm to continue review
+```
+
+**Step 2: Check other states in priority order:**
 
 | Priority | State | Action |
 |----------|-------|--------|
-| 1 | Conflicts | Merge target into PR branch |
+| 1 | Conflicts | Merge target into PR branch (handled above) |
 | 2 | CI failing | Fix CI |
 | 3 | Has feedback | Polish (subagent) |
 | 4 | Approved | Check for suggestions anyway |
@@ -272,13 +299,6 @@ Next: `task-master next --tag <tag>` or `/tm <tag> <next-task>`
 gh pr checks
 gh api repos/<owner>/<repo>/pulls/<number>/comments --jq '.[] | {author: .user.login, path, line, body: .body[0:150]}'
 gh pr view --comments
-```
-
-**For CONFLICTS:**
-```bash
-BASE=$(gh pr view --json baseRefName --jq '.baseRefName')
-git fetch origin && git merge origin/$BASE --no-edit
-# Resolve if needed, commit, push
 ```
 
 **For FEEDBACK/SUGGESTIONS:**
