@@ -135,4 +135,7 @@ If you prefer a different structure, you'll need to modify:
 
 ## License
 
-The agent implementations are provided as-is for use with Claude Code. The Six Thinking Hats method is the intellectual property of Edward de Bono.
+The agent implementations are provided as-is for use with Claude Code.
+
+- The Six Thinking Hats method is the intellectual property of Edward de Bono.
+- The Task Master commands are designed for use with [Claude Task Master](https://github.com/eyaltoledano/claude-task-master) by Eyal Toledano.
