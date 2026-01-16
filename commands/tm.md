@@ -289,10 +289,9 @@ git merge origin/$BASE --no-edit
 |----------|-------|--------|
 | 1 | Conflicts | Merge target into PR branch (handled above) |
 | 2 | CI failing | Fix CI |
-| 3 | Has feedback | Polish (subagent) |
-| 4 | Approved | Check for suggestions anyway |
-| 5 | Waiting | Report "awaiting review" |
-| 6 | Draft | Ask if ready to publish |
+| 3 | Has actionable feedback | Polish (subagent) - includes "approved with suggestions" |
+| 4 | Waiting | Report "awaiting review" |
+| 5 | Draft | Ask if ready to publish |
 
 ```bash
 # Gather all info
@@ -301,36 +300,57 @@ gh api repos/<owner>/<repo>/pulls/<number>/comments --jq '.[] | {author: .user.l
 gh pr view --comments
 ```
 
-**For FEEDBACK/SUGGESTIONS:**
+**CRITICAL: "Approved" does NOT mean done.** Reviewers often approve with suggestions. If ANY inline comment or review comment contains actionable feedback (code improvements, suggestions, questions), treat it as "Has actionable feedback" and implement before exiting.
+
+**What counts as actionable feedback:**
+- Code suggestions (from any reviewer or bot)
+- Questions about implementation ("Why not use X?", "Have you considered Y?")
+- Style/pattern suggestions
+- Performance or security observations
+- Any comment that implies the code could be better
+
+**What is NOT actionable (OK to skip):**
+- Pure praise ("LGTM", "Nice work")
+- Acknowledgments ("Thanks for fixing this")
+- Questions already answered in the PR description
+
+**For ACTIONABLE FEEDBACK (regardless of approval status):**
 ```
 Task(
   subagent_type: "general-purpose",
   model: "opus",
   prompt: """
-Polish PR #<number>.
+Polish PR #<number>. HIGHER STANDARDS MODE.
 
 Working directory: <worktree-path>
 Task Master: <tag>.<task-id>
 
 Feedback: <summarized>
 
-Triage:
-- Quick win → implement
-- Out of scope → TODO(tm:<tag>.<task-id>): <summary>
-- Disagree → note why
+For EACH piece of feedback, you MUST either:
+1. IMPLEMENT it (if reasonable) - this is the default
+2. Mark as out of scope with TODO(tm:<tag>.<task-id>): <summary>
+3. Push back with clear reasoning why not (rare - only if genuinely wrong)
 
-Fix, commit, push.
+Bias toward implementing. "Approved with suggestions" means the suggestions were worth mentioning. Don't be lazy. Don't hand it back until the code is actually good.
+
+Fix, commit, push. Then verify no feedback remains unaddressed.
 """
 )
 ```
 
-**For APPROVED & READY:**
+**ONLY report ready when truly clean:**
 ```
 ## PR #<number> - Ready to Merge
 
-All checks passing. No unaddressed feedback.
+✅ CI passing
+✅ No merge conflicts
+✅ All suggestions implemented or explicitly deferred with reasoning
+
 Merge when ready, then run `/tm` to cleanup.
 ```
+
+**If you feel tempted to exit early**: That's the signal to keep going. The user trusts you to finish the job, not to hand back "mostly done" work.
 
 ---
 
@@ -408,4 +428,4 @@ Human merges PR     → (no command runs)
 - **Context-aware**: Same command, behavior adapts to where you are
 - **Human merges**: Never merge automatically
 - **Subagents can bail**: If work too large, report and suggest decomposition
-- **Talk to CodeRabbit**: Comment to teach it patterns it keeps flagging
+- **Reviewer feedback**: Treat all actionable feedback seriously - from humans, bots (CodeRabbit, etc.), or CI. If a suggestion was worth making, it's probably worth implementing.
