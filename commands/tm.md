@@ -330,8 +330,8 @@ Feedback: <summarized>
 For each piece of feedback:
 1. IMPLEMENT it - the default, because good suggestions make the code better
 2. Defer if genuinely out of scope - create a new Task Master task to track it:
-   `task-master add-subtask --parent=<task-id> --title="<summary>" --description="From PR feedback: <detail>"`
-   This is autonomous - no need to ask permission. Good feedback deserves proper tracking, not lost TODOs.
+   `task-master add --title="<summary>" --description="From PR #<number> feedback: <detail>"`
+   New task = new PR (1:1 rule). This is autonomous - good feedback deserves proper tracking.
 3. Push back if you disagree - with clear reasoning
 
 Someone took time to leave this feedback. That's a gift. Use it.
