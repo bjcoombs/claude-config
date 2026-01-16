@@ -2,6 +2,13 @@
 
 Personal Claude Code configuration, customizations, and workflow tools.
 
+> **Note**: This setup is opinionated. It assumes a specific git workflow:
+> - A sacred `<repo>-main` directory that stays on the default branch (never modified directly)
+> - All work happens in git worktrees under `worktree/`
+> - Task Master tasks map to nested worktrees: `worktree/<tag>/<task-id>--<slug>`
+>
+> If you use a different workflow, you'll need to adapt the commands accordingly.
+
 ## Contents
 
 ### Task Master Commands
