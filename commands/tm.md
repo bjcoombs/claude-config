@@ -332,7 +332,7 @@ For EACH piece of feedback, you MUST either:
 2. Mark as out of scope with TODO(tm:<tag>.<task-id>): <summary>
 3. Push back with clear reasoning why not (rare - only if genuinely wrong)
 
-Bias toward implementing. "Approved with suggestions" means the suggestions were worth mentioning. Don't be lazy. Don't hand it back until the code is actually good.
+Bias toward implementing. "Approved with suggestions" means the reviewer thought these were worth mentioning - treat them as work to be done, not optional notes.
 
 Fix, commit, push. Then verify no feedback remains unaddressed.
 """
@@ -350,7 +350,7 @@ Fix, commit, push. Then verify no feedback remains unaddressed.
 Merge when ready, then run `/tm` to cleanup.
 ```
 
-**If you feel tempted to exit early**: That's the signal to keep going. The user trusts you to finish the job, not to hand back "mostly done" work.
+**Note**: "Approved" signals no blockers, not completion. Suggestions that were worth writing are worth addressing. Stay in the loop until the code is actually polished, not just unblocked.
 
 ---
 
