@@ -20,50 +20,50 @@ The `/tm` command detects context automatically:
 
 ### Six Thinking Hats Framework
 
-An implementation of Edward de Bono's Six Thinking Hats method, adapted for LLM cognition patterns.
+A blind spot detector for high-stakes decisions, based on Edward de Bono's Six Thinking Hats method.
+
+#### How to Run
+
+```
+/6hats Should we rewrite our monolith in microservices?
+```
+
+This spawns six independent agents that analyze your question from different angles, then synthesizes their perspectives into an opinionated recommendation.
 
 | Agent | Role |
 |-------|------|
-| `/6hats` | Orchestration command |
-| `white-hat` | Facts and data |
-| `red-hat` | Emotions and intuition |
+| `white-hat` | Facts and evidence |
+| `red-hat` | Gut feelings and emotional drivers |
 | `black-hat` | Risks and critical analysis |
 | `yellow-hat` | Benefits and opportunities |
 | `green-hat` | Creative alternatives |
-| `blue-hat` | Synthesis and process |
-| `scribe` | Documentation |
+| `blue-hat` | Synthesis and recommendation |
 
-#### Why Six Hats Beats Default Claude
+#### The Trade-off: Tokens vs Blind Spots
 
-LLMs have predictable failure modes: eagerness to please, premature convergence on solutions, and a tendency to validate whatever framing you provide. Six Hats forces structured disagreement with itself.
+**Cost:** 5-10x the tokens of a single prompt. Six parallel agents plus synthesis adds up.
 
-**The problem with asking Claude directly:**
-> "Should we rewrite our monolith in microservices?"
->
-> Claude: "Here are the benefits of microservices... here are some considerations... ultimately it depends on your context." *(Helpful but non-committal)*
+**Benefit:** Catches the question you didn't know to ask. Black Hat might reveal your "performance optimization" is really about deployment fear. Green Hat might find the lazy solution that actually works.
 
-**The same question through Six Hats:**
-- **White Hat** investigates your actual codebase, deployment frequency, team size
-- **Red Hat** surfaces the emotional driver: "We're mass optimising for a problem we don't have"
-- **Black Hat** attacks the proposal: "Your team of 3 will spend 18 months building infrastructure instead of features"
-- **Yellow Hat** finds the real opportunity: "The actual pain is deployment fear—that's solvable without microservices"
-- **Green Hat** generates alternatives: "Feature flags + better testing + gradual module extraction"
-- **Blue Hat** synthesizes: "Don't do it. Here's what to do instead."
+**Real example:** This very README section was reviewed via `/6hats review please`. Black Hat called out that the original version was "a 13-point solution to a 2-point problem" with "rigged comparisons" and "zero evidence." That critique led to this rewrite. A single prompt wouldn't have been that harsh.
 
-The framework produces **opinionated recommendations** because each hat is designed to push hard in its direction. Black Hat doesn't hedge—it attacks. Green Hat doesn't list options—it invents. The synthesis emerges from genuine tension, not diplomatic balance.
+#### When to Use It
 
-**When to use Six Hats:**
-- Architecture decisions with long-term consequences
+- Architecture decisions you can't easily reverse
 - "Should we..." questions where you suspect you're asking the wrong question
-- Situations with multiple stakeholders or competing concerns
+- Decisions where being wrong costs 100x more than the analysis
 - When you want pushback, not validation
-- Post-mortems and root cause analysis
 
-**When default Claude is fine:**
-- Implementation questions with clear requirements
-- Debugging with specific error messages
-- Code review of well-scoped changes
-- Documentation and explanation tasks
+#### When to Skip It
+
+For routine decisions, a single well-crafted prompt is enough:
+
+```
+Help me decide [X]. Be opinionated. If this is a bad idea, say so directly.
+What am I not considering? What's the lazy solution that might work?
+```
+
+Use Six Hats when the stakes justify the token cost. Skip it for debugging, implementation details, or decisions you can easily reverse.
 
 ## Repository Structure
 
