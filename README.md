@@ -33,6 +33,38 @@ An implementation of Edward de Bono's Six Thinking Hats method, adapted for LLM 
 | `blue-hat` | Synthesis and process |
 | `scribe` | Documentation |
 
+#### Why Six Hats Beats Default Claude
+
+LLMs have predictable failure modes: eagerness to please, premature convergence on solutions, and a tendency to validate whatever framing you provide. Six Hats forces structured disagreement with itself.
+
+**The problem with asking Claude directly:**
+> "Should we rewrite our monolith in microservices?"
+>
+> Claude: "Here are the benefits of microservices... here are some considerations... ultimately it depends on your context." *(Helpful but non-committal)*
+
+**The same question through Six Hats:**
+- **White Hat** investigates your actual codebase, deployment frequency, team size
+- **Red Hat** surfaces the emotional driver: "We're mass optimising for a problem we don't have"
+- **Black Hat** attacks the proposal: "Your team of 3 will spend 18 months building infrastructure instead of features"
+- **Yellow Hat** finds the real opportunity: "The actual pain is deployment fear—that's solvable without microservices"
+- **Green Hat** generates alternatives: "Feature flags + better testing + gradual module extraction"
+- **Blue Hat** synthesizes: "Don't do it. Here's what to do instead."
+
+The framework produces **opinionated recommendations** because each hat is designed to push hard in its direction. Black Hat doesn't hedge—it attacks. Green Hat doesn't list options—it invents. The synthesis emerges from genuine tension, not diplomatic balance.
+
+**When to use Six Hats:**
+- Architecture decisions with long-term consequences
+- "Should we..." questions where you suspect you're asking the wrong question
+- Situations with multiple stakeholders or competing concerns
+- When you want pushback, not validation
+- Post-mortems and root cause analysis
+
+**When default Claude is fine:**
+- Implementation questions with clear requirements
+- Debugging with specific error messages
+- Code review of well-scoped changes
+- Documentation and explanation tasks
+
 ## Repository Structure
 
 ```
