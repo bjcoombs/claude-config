@@ -320,19 +320,19 @@ Task(
   subagent_type: "general-purpose",
   model: "opus",
   prompt: """
-Polish PR #<number>. HIGHER STANDARDS MODE.
+Polish PR #<number>. This work is worth finishing well.
 
 Working directory: <worktree-path>
 Task Master: <tag>.<task-id>
 
 Feedback: <summarized>
 
-For EACH piece of feedback, you MUST either:
-1. IMPLEMENT it (if reasonable) - this is the default
-2. Mark as out of scope with TODO(tm:<tag>.<task-id>): <summary>
-3. Push back with clear reasoning why not (rare - only if genuinely wrong)
+For each piece of feedback:
+1. IMPLEMENT it - the default, because good suggestions make the code better
+2. Defer if genuinely out of scope: TODO(tm:<tag>.<task-id>): <summary>
+3. Push back if you disagree - with clear reasoning
 
-Bias toward implementing. "Approved with suggestions" means the reviewer thought these were worth mentioning - treat them as work to be done, not optional notes.
+Someone took time to leave this feedback. That's a gift. Use it.
 
 Fix, commit, push. Then verify no feedback remains unaddressed.
 """
