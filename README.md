@@ -2,12 +2,7 @@
 
 Personal Claude Code configuration, customizations, and workflow tools.
 
-> **Note**: This setup is opinionated. It assumes a specific git workflow:
-> - A sacred `<repo>-main` directory that stays on the default branch (never modified directly)
-> - All work happens in git worktrees under `worktree/`
-> - Task Master tasks map to nested worktrees: `worktree/<tag>/<task-id>--<slug>`
->
-> If you use a different workflow, you'll need to adapt the commands accordingly.
+> **Note**: This setup is opinionated. See [Git Workflow](#git-workflow) below for details.
 
 ## Contents
 
@@ -73,6 +68,70 @@ git clone git@github.com:bjcoombs/claude-config.git /tmp/claude-config
 cp -r /tmp/claude-config/agents ~/.claude/
 cp -r /tmp/claude-config/commands ~/.claude/
 ```
+
+## Git Workflow
+
+This setup assumes a specific directory structure using git worktrees. The key principle: **never work directly on the default branch**.
+
+### Directory Structure
+
+```
+~/dev/github.com/<org>/<repo>/
+├── <repo>-main/                    # SACRED - always on default branch, never modified
+└── worktree/
+    ├── <tag>/                      # Task Master tag folder (nested)
+    │   ├── 1--create-schema/       # Task worktree
+    │   └── 2--add-api/             # Another task worktree
+    └── fix-login-bug/              # Non-TM worktree (flat)
+```
+
+### Why This Structure?
+
+1. **`<repo>-main/` is sacred**: Always stays on `develop`/`main`, always clean. This gives you a pristine reference point and makes creating new branches reliable.
+
+2. **All work in worktrees**: Every task gets its own worktree. No branch switching, no stashing, no conflicts between tasks.
+
+3. **Parallel work**: Multiple worktrees = multiple tasks in progress simultaneously in different terminal windows.
+
+### Creating a Worktree
+
+```bash
+# Start from the sacred directory
+cd ~/dev/github.com/<org>/<repo>/<repo>-main
+git checkout develop && git pull origin develop
+
+# Create branch and worktree
+git branch fix-login-bug
+git worktree add ../worktree/fix-login-bug fix-login-bug
+
+# Work there
+cd ../worktree/fix-login-bug
+# ... make changes, commit, push, create PR ...
+
+# Cleanup after PR merges
+cd ~/dev/github.com/<org>/<repo>/<repo>-main
+git worktree remove ../worktree/fix-login-bug
+git branch -d fix-login-bug
+```
+
+### Task Master Worktrees
+
+When using Task Master, worktrees are nested by tag:
+
+```bash
+# Task Master creates this structure automatically via /tm
+worktree/458-feature/1.1--create-schema
+worktree/458-feature/1.2--add-validation
+worktree/458-feature/2--write-tests
+```
+
+The `/tm` command handles worktree creation and cleanup automatically based on task state.
+
+### Adapting for Your Workflow
+
+If you prefer a different structure, you'll need to modify:
+- `commands/tm.md` - the path patterns and worktree creation logic
+- Your `CLAUDE.md` - any references to the directory structure
 
 ## License
 
