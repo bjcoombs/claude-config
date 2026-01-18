@@ -97,19 +97,21 @@ task-master show "$TASK_ID" --json
 
 **If `$ARGUMENTS` is empty** → SUGGEST, don't auto-start:
 ```bash
-task-master next --format json
+# Show ready tasks across all tags
+task-master list --all-tags --ready --json
 ```
 Then report:
 ```
-## Next Task Available
+## Ready Tasks
 
-**Tag**: <tag>
-**Task**: <task-id> - <title>
-**Complexity**: <points>
+| Tag | Task | Title | Points |
+|-----|------|-------|--------|
+| <tag> | <id> | <title> | <points> |
+...
 
-Run `/tm <tag> <task-id>` to start this task.
+Run `/tm <tag> <task-id>` to start a task.
 ```
-**Do NOT start automatically.** Empty args = show what's next, let user confirm.
+**Do NOT start automatically.** Empty args = show what's available, let user choose.
 
 ### Step 2: Check Complexity Analysis (only if task explicitly specified)
 
