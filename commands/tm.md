@@ -95,13 +95,25 @@ TASK_ID="<argument>"
 task-master show "$TASK_ID" --json
 ```
 
-**If `$ARGUMENTS` is empty**:
+**If `$ARGUMENTS` is empty** → SUGGEST, don't auto-start:
 ```bash
 task-master next --format json
-# Use returned task, warn about implicit selection
 ```
+Then report:
+```
+## Next Task Available
 
-### Step 2: Check Complexity Analysis
+**Tag**: <tag>
+**Task**: <task-id> - <title>
+**Complexity**: <points>
+
+Run `/tm <tag> <task-id>` to start this task.
+```
+**Do NOT start automatically.** Empty args = show what's next, let user confirm.
+
+### Step 2: Check Complexity Analysis (only if task explicitly specified)
+
+**Skip this and all following steps if `$ARGUMENTS` was empty** - we already reported the suggestion above.
 
 If task lacks `complexity` field:
 ```bash
