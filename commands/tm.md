@@ -322,11 +322,13 @@ gh pr view --comments
 - Style/pattern suggestions
 - Performance or security observations
 - Any comment that implies the code could be better
+- **"Low priority" suggestions** - priority labels are about urgency, not importance. If it improves the code, implement it.
 
 **What is NOT actionable (OK to skip):**
 - Pure praise ("LGTM", "Nice work")
 - Acknowledgments ("Thanks for fixing this")
 - Questions already answered in the PR description
+- Suggestions explicitly marked as "nitpick - ignore if you disagree"
 
 **For ACTIONABLE FEEDBACK (regardless of approval status):**
 ```
