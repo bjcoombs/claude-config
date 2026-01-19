@@ -37,14 +37,13 @@ Is current directory a TM worktree (or cd'd to one via conversation context)?
 (Pattern: worktree/<tag>/<task-id>--<slug>)
 │
 ├─ YES → Check PR state (quick gh commands only)
-│   ├─ PR merged      → Launch cleanup-specialist
-│   ├─ PR open        → Launch review-specialist
-│   ├─ Commits, no PR → Launch pr-creator
-│   └─ No commits     → Invoke Ralph for TDD implementation
+│   ├─ PR merged → Launch cleanup-specialist (subagent)
+│   ├─ PR open   → Invoke Ralph for review loop
+│   └─ No PR     → Invoke Ralph for full cycle (implement → PR → review)
 │
 └─ NO → START mode
-    ├─ Args given    → Setup worktree, then invoke Ralph
-    └─ No args       → Report ready tasks (no subagent needed)
+    ├─ Args given → Setup worktree, then invoke Ralph for full cycle
+    └─ No args    → Report ready tasks (no subagent needed)
 ```
 
 **CRITICAL: Never auto-start new tasks.** Conversation context can continue existing work (review, cleanup), but starting a NEW task requires explicit `$ARGUMENTS`.
@@ -58,10 +57,9 @@ gh pr view --json number,state,mergedAt 2>/dev/null
 
 | Condition | Action |
 |-----------|--------|
-| `mergedAt` is set | Launch `cleanup-specialist` |
-| PR exists, open | Launch `review-specialist` |
-| No PR, has commits | Launch `pr-creator` |
-| No PR, no commits | Invoke Ralph for TDD |
+| `mergedAt` is set | Launch `cleanup-specialist` (subagent) |
+| PR exists, open | Invoke Ralph for review loop |
+| No PR | Invoke Ralph for full cycle |
 
 ---
 
@@ -108,37 +106,52 @@ task-master tags use "<tag>" && task-master set-status --id="<task-id>" --status
 task-master show <task-id> --json
 ```
 
-**Step 3: Invoke Ralph for TDD implementation**
+**Step 3: Invoke Ralph for full cycle (implement → PR → review)**
 
 ```
 Skill(
   skill: "ralph-loop:ralph-loop",
   args: """
-Implement <tag>.<task-id>: <task-title>
+Complete <tag>.<task-id>: <task-title>
 
 Working directory: <worktree-path>
 
 ## Requirements
 <task-description-and-subtasks>
 
-## TDD Loop
+## Phase 1: Implementation (TDD)
 1. Run tests for affected code
 2. If tests fail, fix the code
-3. If tests pass but coverage low, add tests
-4. Commit incrementally with clear messages
+3. If coverage low, add tests
+4. Commit incrementally
+
+## Phase 2: Create PR (when local tests pass)
+1. Push branch: `git push -u origin <branch>`
+2. Create PR: `gh pr create --title '<title>' --body '<TM reference + summary>'`
+3. Note the PR number
+
+## Phase 3: Review Loop (after PR created)
+1. Wait 60s for CI to start
+2. Check CI: `gh pr checks <number>`
+3. Check feedback: `gh api repos/<owner>/<repo>/pulls/<number>/comments`
+4. If CI fails or feedback exists:
+   - Fix issues
+   - Commit and push
+   - Go to step 1
+5. If CI passes and no unaddressed feedback, done
 
 ## Completion Criteria
-- All tests passing
-- All subtasks addressed
-- Code committed
+- PR created and pushed
+- CI passing
+- No unaddressed review feedback
 
-Output <promise>IMPLEMENTATION_COMPLETE</promise> when done.
---max-iterations 30 --completion-promise IMPLEMENTATION_COMPLETE
+Output <promise>PR_READY</promise> when done.
+--max-iterations 50 --completion-promise PR_READY
 """
 )
 ```
 
-After Ralph completes, report: "Implementation complete. Run `/tm` to create PR."
+After Ralph completes, report PR URL and status.
 
 ---
 
@@ -175,104 +188,98 @@ Report complete.
 
 ---
 
-### Mode: REVIEW → Launch review-specialist
+### Mode: REVIEW → Invoke Ralph for review loop
+
+PR exists and is open. Use Ralph to iterate on CI and feedback:
 
 ```
-Task(
-  subagent_type: "general-purpose",
-  model: "sonnet",
-  prompt: """
-# Review PR #<number>
+Skill(
+  skill: "ralph-loop:ralph-loop",
+  args: """
+Review PR #<number> for <tag>.<task-id>
 
 Working directory: <worktree-path>
-Task Master: <tag>.<task-id>
 
-You're an orchestrator. Fix simple things yourself, spawn opus for complex code changes.
+## Review Loop
+1. Check CI: `gh pr checks <number>`
+2. Check inline feedback: `gh api repos/<owner>/<repo>/pulls/<number>/comments`
+3. Check conversation: `gh pr view <number> --comments`
+4. If CI fails or unaddressed feedback:
+   - Fix issues (check TM before creating new tasks for suggestions)
+   - Commit and push
+   - Wait 60s for CI
+   - Go to step 1
+5. If CI passes and no unaddressed feedback, done
 
-## What's different from normal
+## Completion Criteria
+- CI passing
+- No unaddressed review feedback
 
-1. **TodoWrite tracks issues** - Create one item per issue (include comment ID). This prevents loops. Exit when all done + no new feedback after push.
-
-2. **Spawn opus for complex fixes** - Don't attempt complex code changes yourself:
-   ```
-   Task(model: "opus", prompt: "Fix <specific issue> in <file>. Commit only, don't push. Report FIXED or BLOCKED.")
-   ```
-
-3. **Check TM before creating tasks** - Future work suggestions may already be tracked:
-   ```bash
-   task-master tags use "<tag>" && task-master list --json
-   ```
-
-## Flow
-
-Gather state → TodoWrite issues → Fix/delegate/defer each → Push → Check for NEW feedback only → Repeat or exit
-
-Report: ready, waiting, or blocked.
+Output <promise>PR_READY</promise> when done.
+--max-iterations 30 --completion-promise PR_READY
 """
 )
 ```
 
----
-
-### Mode: CREATE_PR → Launch pr-creator
-
-```
-Task(
-  subagent_type: "general-purpose",
-  model: "sonnet",
-  prompt: """
-# Create PR for <tag>.<task-id>
-
-Working directory: <worktree-path>
-
-Commits exist, no PR yet. Push, create PR (include TM reference in body), check CI. Report PR number and status.
-"""
-)
-```
+After Ralph completes, report PR status.
 
 ---
 
-### Mode: IMPLEMENT → Invoke Ralph Loop for TDD
+### Mode: CREATE_PR or IMPLEMENT → Invoke Ralph for full cycle
 
-Worktree exists but no commits. Use Ralph for iterative TDD:
+Whether commits exist (needs PR) or not (needs implementation), use Ralph for the full cycle.
 
 ```bash
 # Get task details for the prompt
 task-master tags use "<tag>" && task-master show <task-id> --json
 ```
 
-Then invoke Ralph directly (not via subagent):
+Then invoke Ralph (same prompt as START mode Step 3):
 
 ```
 Skill(
   skill: "ralph-loop:ralph-loop",
   args: """
-Implement <tag>.<task-id>: <task-title>
+Complete <tag>.<task-id>: <task-title>
 
 Working directory: <worktree-path>
 
 ## Requirements
 <task-description-and-subtasks>
 
-## TDD Loop
-1. Run tests: <test-command>
+## Phase 1: Implementation (TDD) - skip if commits already exist
+1. Run tests for affected code
 2. If tests fail, fix the code
-3. If tests pass but coverage low, add tests
-4. Commit incrementally with clear messages
-5. Repeat until all requirements met
+3. If coverage low, add tests
+4. Commit incrementally
+
+## Phase 2: Create PR (when local tests pass) - skip if PR exists
+1. Push branch: `git push -u origin <branch>`
+2. Create PR: `gh pr create --title '<title>' --body '<TM reference + summary>'`
+3. Note the PR number
+
+## Phase 3: Review Loop (after PR created)
+1. Wait 60s for CI to start
+2. Check CI: `gh pr checks <number>`
+3. Check feedback: `gh api repos/<owner>/<repo>/pulls/<number>/comments`
+4. If CI fails or feedback exists:
+   - Fix issues
+   - Commit and push
+   - Go to step 1
+5. If CI passes and no unaddressed feedback, done
 
 ## Completion Criteria
-- All tests passing
-- All subtasks addressed
-- Code committed
+- PR created and pushed
+- CI passing
+- No unaddressed review feedback
 
-Output <promise>IMPLEMENTATION_COMPLETE</promise> when done.
---max-iterations 30 --completion-promise IMPLEMENTATION_COMPLETE
+Output <promise>PR_READY</promise> when done.
+--max-iterations 50 --completion-promise PR_READY
 """
 )
 ```
 
-After Ralph completes, report: "Implementation complete. Run `/tm` to create PR."
+After Ralph completes, report PR URL and status.
 
 ---
 
@@ -280,9 +287,10 @@ After Ralph completes, report: "Implementation complete. Run `/tm` to create PR.
 
 ```
 /tm → detect context → route:
-  ├─ Implementation needed → invoke Ralph (TDD loop)
-  ├─ PR work needed → launch subagent (review/cleanup/pr-create)
-  └─ No context → list ready tasks
+  ├─ No PR (implement/create) → invoke Ralph (full cycle)
+  ├─ PR open (review)         → invoke Ralph (review loop)
+  ├─ PR merged (cleanup)      → launch cleanup-specialist (subagent)
+  └─ No context               → list ready tasks
 ```
 
 ---
