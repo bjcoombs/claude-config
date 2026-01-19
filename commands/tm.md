@@ -308,11 +308,17 @@ git merge origin/$BASE --no-edit
 | 5 | Draft | Ask if ready to publish |
 
 ```bash
-# Gather all info
+# Gather ALL feedback - not just one source
 gh pr checks
+
+# Inline comments from ALL reviewers (CodeRabbit, Claude, humans)
 gh api repos/<owner>/<repo>/pulls/<number>/comments --jq '.[] | {author: .user.login, path, line, body: .body[0:150]}'
-gh pr view --comments
+
+# Conversation comments from ALL sources
+gh api repos/<owner>/<repo>/issues/<number>/comments --jq '.[] | {author: .user.login, body: .body[0:300]}'
 ```
+
+**CRITICAL: Check ALL feedback sources.** Don't stop at CodeRabbit - also check claude[bot] comments and human reviewer comments. Every source gets addressed.
 
 **CRITICAL: "Approved" does NOT mean done.** Reviewers often approve with suggestions. If ANY inline comment or review comment contains actionable feedback (code improvements, suggestions, questions), treat it as "Has actionable feedback" and implement before exiting.
 
