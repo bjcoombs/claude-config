@@ -1,5 +1,5 @@
 ---
-description: Task Master - unified command for start, review, and cleanup
+description: Task Master - unified command for start, review, and close
 argument-hint: [tag task-id] (optional - derives context from worktree if omitted)
 ---
 
