@@ -335,18 +335,35 @@ gh api repos/<owner>/<repo>/pulls/<number>/comments --jq '.[] | {author: .user.l
 
 # Conversation comments
 gh api repos/<owner>/<repo>/issues/<number>/comments --jq '.[] | {author: .user.login, body: .body[0:300]}'
+
+# IMPORTANT: Get existing TM tasks to avoid duplicate suggestions
+task-master tags use "<tag>" && task-master list --json
 ```
+
+## Exit Early If Clean
+
+**STOP HERE if all true:**
+- CI passing
+- No merge conflicts
+- No UNADDRESSED human comments (bot suggestions alone don't block)
+
+Report "Ready to merge" and exit. Don't look for more things to fix.
 
 ## Step 2: Categorize Each Issue
 
-For each issue found, categorize:
+**Only process issues from HUMANS.** Bot suggestions (CodeRabbit, Claude, etc.) are informational, not blocking.
+
+For each HUMAN issue found, categorize:
 
 | Category | Examples | Action |
 |----------|----------|--------|
 | **Simple** | Typo, rename, config change, add comment | Fix yourself |
 | **Complex** | Logic change, new code, refactor, bug fix | Spawn opus subagent |
-| **Defer** | Out of scope for this PR | Track in TM, reply on PR |
+| **Already Tracked** | Matches existing TM task | Reply "tracked in TM task X" |
+| **Defer** | Out of scope, not in TM yet | Add to TM, reply on PR |
 | **Disagree** | Valid reasoning to keep current approach | Reply on PR with reasoning |
+
+**Check TM before creating tasks:** If a suggestion matches an existing task title/description, reference that task instead of creating a duplicate.
 
 ## Step 3: Handle Simple Issues Yourself
 
@@ -459,9 +476,17 @@ Issues needing human input:
 - <issue>
 ```
 
-## Key Principle
+## Key Principles
 
-You are an orchestrator, not a hero. Simple stuff: do it. Complex stuff: delegate to opus. This keeps your context light and ensures quality fixes.
+1. **Good enough is good enough.** CI green + no human blockers = done. Don't gold-plate.
+
+2. **Bot suggestions are informational, not blocking.** CodeRabbit, Claude, etc. provide ideas. Humans decide what's required.
+
+3. **TM is the source of truth for future work.** Check it before suggesting. Reference it instead of duplicating.
+
+4. **You're an orchestrator, not a hero.** Simple: do it. Complex: delegate. Unknown: ask.
+
+5. **Time-box yourself.** If you've been running >5 minutes without progress, report status and exit.
 """
 )
 ```
