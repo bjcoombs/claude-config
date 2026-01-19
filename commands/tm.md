@@ -13,11 +13,10 @@ argument-hint: [tag task-id] (optional - derives context from worktree if omitte
 
 ## Phase 0: Detect Context
 
-**If `$ARGUMENTS` is empty:** Skip all context detection. Just list ready tasks and let user choose. This prevents conversation context from auto-adopting tasks.
-
-**If `$ARGUMENTS` provided:** Check context in order:
+**Check in order:**
 1. Current directory - pwd matches TM worktree pattern?
-2. Arguments - Explicit tag/task-id provided?
+2. Conversation context - Recent "📍 Current Work" footer with worktree path?
+3. Arguments - Explicit tag/task-id provided?
 
 ### Detect Worktree Pattern
 
@@ -26,10 +25,15 @@ pwd
 git branch --show-current 2>/dev/null || echo "NOT_GIT"
 ```
 
+**If conversation shows active work but pwd is NOT that worktree:**
+```bash
+cd ~/dev/github.com/<org>/<repo>/worktree/<tag>/<task-id>--<slug>
+```
+
 **Decision tree:**
 
 ```
-Is current directory a TM worktree?
+Is current directory a TM worktree (or cd'd to one via conversation context)?
 (Pattern: worktree/<tag>/<task-id>--<slug>)
 │
 ├─ YES → Check PR state (quick gh commands only)
@@ -42,6 +46,8 @@ Is current directory a TM worktree?
     ├─ Args given    → Launch start-specialist
     └─ No args       → Report ready tasks (no subagent needed)
 ```
+
+**CRITICAL: Never auto-start new tasks.** Conversation context can continue existing work (review, cleanup), but starting a NEW task requires explicit `$ARGUMENTS`.
 
 ### Check PR State (Quick - No Heavy Processing)
 
