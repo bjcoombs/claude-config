@@ -308,17 +308,17 @@ git merge origin/$BASE --no-edit
 | 5 | Draft | Ask if ready to publish |
 
 ```bash
-# Gather ALL feedback - not just one source
+# Gather ALL feedback
 gh pr checks
 
-# Inline comments from ALL reviewers (CodeRabbit, Claude, humans)
+# Inline comments (file-specific feedback)
 gh api repos/<owner>/<repo>/pulls/<number>/comments --jq '.[] | {author: .user.login, path, line, body: .body[0:150]}'
 
-# Conversation comments from ALL sources
+# Conversation comments (general feedback)
 gh api repos/<owner>/<repo>/issues/<number>/comments --jq '.[] | {author: .user.login, body: .body[0:300]}'
 ```
 
-**CRITICAL: Check ALL feedback sources.** Don't stop at CodeRabbit - also check claude[bot] comments and human reviewer comments. Every source gets addressed.
+**Check ALL feedback.** Someone took time to write it. Address it or explain why not.
 
 **CRITICAL: "Approved" does NOT mean done.** Reviewers often approve with suggestions. If ANY inline comment or review comment contains actionable feedback (code improvements, suggestions, questions), treat it as "Has actionable feedback" and implement before exiting.
 
@@ -452,4 +452,4 @@ Human merges PR     → (no command runs)
 - **Context-aware**: Same command, behavior adapts to where you are
 - **Human merges**: Never merge automatically
 - **Subagents can bail**: If work too large, report and suggest decomposition
-- **Reviewer feedback**: Treat all actionable feedback seriously - from humans, bots (CodeRabbit, etc.), or CI. If a suggestion was worth making, it's probably worth implementing.
+- **Reviewer feedback**: Treat all feedback seriously. If someone took time to write it, it's worth addressing.
