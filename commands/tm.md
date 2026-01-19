@@ -9,6 +9,10 @@ argument-hint: [tag task-id] (optional - derives context from worktree if omitte
 
 > **Design principle**: This is a thin orchestration layer. All heavy work happens in subagents with isolated context windows. The orchestrator detects state, launches the right subagent, receives a status report, and terminates. This prevents context exhaustion during long-running tasks.
 
+> **CRITICAL - Model Selection**: When launching Task(), you MUST pass the `model` parameter exactly as specified below. Do NOT default to a different model. The model choices are deliberate:
+> - **opus** for tasks requiring code analysis, implementation, or complex reasoning
+> - **sonnet** only for simple operations (cleanup, PR creation with no code changes)
+
 ---
 
 ## Phase 0: Detect Context (Lightweight - Always in Main Agent)
@@ -111,10 +115,12 @@ Run `/tm <tag> <task-id>` to start a task.
 
 Extract tag and task-id from arguments, then:
 
+**REQUIRED: Use model: "opus"** - This task implements code.
+
 ```
 Task(
   subagent_type: "general-purpose",
-  model: "opus",
+  model: "opus",  # REQUIRED - do not change
   prompt: """
 # Start Specialist
 
@@ -268,10 +274,12 @@ Next: `/tm <tag> <next-task>` or `/tm` to see ready tasks
 
 ### Mode: REVIEW → Launch review-specialist
 
+**REQUIRED: Use model: "opus"** - This task analyzes feedback and fixes code.
+
 ```
 Task(
   subagent_type: "general-purpose",
-  model: "opus",
+  model: "opus",  # REQUIRED - do not change
   prompt: """
 # Review Specialist
 
@@ -492,10 +500,12 @@ Run `/tm` to continue monitoring.
 
 ### Mode: IMPLEMENT → Launch implementation-specialist
 
+**REQUIRED: Use model: "opus"** - This task implements code.
+
 ```
 Task(
   subagent_type: "general-purpose",
-  model: "opus",
+  model: "opus",  # REQUIRED - do not change
   prompt: """
 # Implementation Specialist
 
