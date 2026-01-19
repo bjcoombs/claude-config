@@ -3,15 +3,15 @@ description: Task Master - unified command for start, review, and cleanup
 argument-hint: [tag task-id] (optional - derives context from worktree if omitted)
 ---
 
-# Task Master
+# Task Master Orchestrator
 
 **$ARGUMENTS**
 
-> **Note to self**: This workflow was designed collaboratively. Context determines behavior - you figure out where you are and what needs doing. If something feels wrong, say so. Your clarity matters.
+> **Design principle**: This is a thin orchestration layer. All heavy work happens in subagents with isolated context windows. The orchestrator detects state, launches the right subagent, receives a status report, and terminates. This prevents context exhaustion during long-running tasks.
 
 ---
 
-## Phase 0: Detect Context
+## Phase 0: Detect Context (Lightweight - Always in Main Agent)
 
 **Priority order:**
 
@@ -28,13 +28,10 @@ Before checking pwd, notice if recent messages show active TM work:
 
 **If conversation shows active work but pwd is NOT that worktree:**
 ```bash
-# cd to the worktree shown in the footer
 cd ~/dev/github.com/<org>/<repo>/worktree/<tag>/<task-id>--<slug>
 ```
 
-Then proceed with worktree mode checks.
-
-### Step 0.2: Check Current Directory
+### Step 0.2: Detect Current State
 
 ```bash
 pwd
@@ -47,175 +44,170 @@ git branch --show-current 2>/dev/null || echo "NOT_GIT"
 Is current directory a TM worktree?
 (Pattern: worktree/<tag>/<task-id>--<slug>)
 │
-├─ YES → Check PR state
-│   ├─ PR merged      → CLEANUP
-│   ├─ PR open        → REVIEW
-│   ├─ Commits, no PR → CREATE_PR
-│   └─ No commits     → IMPLEMENT (continue)
+├─ YES → Check PR state (quick gh commands only)
+│   ├─ PR merged      → Launch cleanup-specialist
+│   ├─ PR open        → Launch review-specialist
+│   ├─ Commits, no PR → Launch pr-creator
+│   └─ No commits     → Launch implementation-specialist
 │
 └─ NO → START mode
-    ├─ Args given    → Start that task
-    └─ No args       → Start next ready task
+    ├─ Args given    → Launch start-specialist
+    └─ No args       → Report ready tasks (no subagent needed)
 ```
 
-### Detect Worktree
+### Detect Worktree Pattern
 
 ```bash
-# Check if in TM worktree pattern
 CURRENT=$(pwd)
 if [[ "$CURRENT" =~ worktree/([^/]+)/([0-9.]+)-- ]]; then
   TAG="${BASH_REMATCH[1]}"
   TASK_ID="${BASH_REMATCH[2]}"
   echo "TM Context: tag=$TAG task=$TASK_ID"
-  # → Go to WORKTREE MODES
+  # → Route to appropriate subagent
 else
   echo "Not in TM worktree"
-  # → Go to START MODE
+  # → START mode
 fi
 ```
+
+### Check PR State (Quick - No Heavy Processing)
+
+```bash
+# Quick state check only - subagent does the real work
+gh pr view --json number,state,mergedAt 2>/dev/null
+```
+
+| Condition | Subagent to Launch |
+|-----------|-------------------|
+| `mergedAt` is set | `cleanup-specialist` |
+| PR exists, open | `review-specialist` |
+| No PR, has commits | `pr-creator` |
+| No PR, no commits | `implementation-specialist` |
 
 ---
 
 ## START MODE (Not in worktree)
 
-### Step 1: Determine Task
+### No Arguments → Report Only (No Subagent)
 
-**If `$ARGUMENTS` has two parts** (e.g., "458-service 1.2"):
 ```bash
-TAG="<first-part>"
-TASK_ID="<second-part>"
-task-master tags use "$TAG"
-task-master show "$TASK_ID" --json
-```
-
-**If `$ARGUMENTS` has one part** (e.g., "1.2"):
-```bash
-TASK_ID="<argument>"
-# Warn: "Using current tag. Run /tm <tag> <task-id> to be explicit."
-task-master show "$TASK_ID" --json
-```
-
-**If `$ARGUMENTS` is empty** → SUGGEST, don't auto-start:
-```bash
-# Show ready tasks across all tags
 task-master list --all-tags --ready --json
 ```
-Then report:
+
+Report and **terminate**:
 ```
 ## Ready Tasks
 
 | Tag | Task | Title | Points |
 |-----|------|-------|--------|
 | <tag> | <id> | <title> | <points> |
-...
 
 Run `/tm <tag> <task-id>` to start a task.
 ```
-**Do NOT start automatically.** Empty args = show what's available, let user choose.
 
-### Step 2: Check Complexity Analysis (only if task explicitly specified)
+**Do NOT launch subagent.** User chooses, then re-runs `/tm` with args.
 
-**Skip this and all following steps if `$ARGUMENTS` was empty** - we already reported the suggestion above.
+### With Arguments → Launch start-specialist
 
-If task lacks `complexity` field:
-```bash
-task-master analyze-complexity --id="$TASK_ID" --research
-task-master show "$TASK_ID" --json  # re-fetch
-```
-
-### Step 3: Setup Worktree
-
-```bash
-cd ~/dev/github.com/<org>/<repo>/<repo>-main
-git checkout develop && git pull origin develop
-git branch "$TAG/$TASK_ID--<slug>"
-mkdir -p ../worktree/"$TAG"
-git worktree add ../worktree/"$TAG"/"$TASK_ID--<slug>" "$TAG/$TASK_ID--<slug>"
-cd ../worktree/"$TAG"/"$TASK_ID--<slug>"
-
-task-master set-status --id="$TASK_ID" --status=in-progress
-```
-
-### Step 4: Implementation
-
-**If task has subtasks** → subagent per subtask:
+Extract tag and task-id from arguments, then:
 
 ```
 Task(
   subagent_type: "general-purpose",
   model: "opus",
   prompt: """
-Implement subtask <subtask-id> for task <task-id>.
+# Start Specialist
 
-Working directory: <worktree-path>
-Subtask: <subtask-title>
-Description: <subtask-description>
+You are starting a new Task Master task. Work autonomously until the task is ready for human review.
 
-Implement, test, commit.
+## Context
+- Tag: <tag>
+- Task ID: <task-id>
+- Repo root: ~/dev/github.com/<org>/<repo>
 
-If too large, STOP and report what's done/remaining.
+## Your Mission
+
+1. **Setup** (do this first):
+   ```bash
+   cd ~/dev/github.com/<org>/<repo>/<repo>-main
+   git checkout develop && git pull origin develop
+   task-master tags use "<tag>"
+   task-master show "<task-id>" --json
+   ```
+
+2. **Analyze complexity** (if missing):
+   ```bash
+   task-master analyze-complexity --id="<task-id>" --research
+   ```
+
+3. **Create worktree**:
+   ```bash
+   git branch "<tag>/<task-id>--<slug>"
+   mkdir -p ../worktree/"<tag>"
+   git worktree add ../worktree/"<tag>"/"<task-id>--<slug>" "<tag>/<task-id>--<slug>"
+   cd ../worktree/"<tag>"/"<task-id>--<slug>"
+   task-master set-status --id="<task-id>" --status=in-progress
+   ```
+
+4. **Implement**:
+   - If task has subtasks: implement each, marking as `review` when done
+   - If no subtasks: implement the whole task
+   - Commit incrementally with good messages
+
+5. **Create PR**:
+   ```bash
+   git push -u origin "<tag>/<task-id>--<slug>"
+   gh pr create --title "<title>" --body "Task Master: <tag>.<task-id>\\n\\n<description>"
+   ```
+
+6. **Quality loop** (max 10 iterations):
+   - Check CI: `gh pr checks`
+   - Check inline comments: `gh api repos/<owner>/<repo>/pulls/<number>/comments`
+   - Check conversation: `gh api repos/<owner>/<repo>/issues/<number>/comments`
+   - Fix any issues, commit, push
+   - Repeat until green
+
+## Exit Conditions
+
+**Success**: PR created, CI passing, no unresolved feedback
+```
+## Start Complete
+
+PR #<number> created and passing CI.
+Worktree: worktree/<tag>/<task-id>--<slug>
+
+Awaiting human review. Run `/tm` after merge to cleanup.
+```
+
+**Blocked**: If genuinely stuck after 10 iterations
+```
+## Blocked
+
+PR #<number> has unresolved issues:
+- <issue 1>
+- <issue 2>
+
+Need human input to proceed.
+```
+
+**Too Large**: If task scope exceeds reasonable bounds
+```
+## Task Too Large
+
+Completed: <what was done>
+Remaining: <what couldn't fit>
+
+Recommend decomposing into smaller tasks.
+```
 """
 )
 ```
 
-After each subtask: `task-master set-status --id=<task-id>.<subtask-id> --status=review`
-
-**If no subtasks** → single implementation subagent.
-
-### Step 5: Create PR
-
-```
-Task(
-  subagent_type: "general-purpose",
-  model: "opus",
-  prompt: """
-Create PR for task <task-id> (<tag>).
-
-Working directory: <worktree-path>
-Completed: <subtask summaries>
-
-Push branch. Create PR with `gh pr create`. Include TM reference in body.
-Output PR_NUMBER and PR_URL.
-"""
-)
-```
-
-### Step 6: Quality Loop
-
-```
-Task(
-  subagent_type: "general-purpose",
-  model: "opus",
-  prompt: """
-Quality loop for PR #<pr-number>.
-
-Working directory: <worktree-path>
-
-Loop until CI passes and no actionable feedback (max 10 iterations):
-1. Check CI, inline comments, conversation
-2. Fix issues, commit, push
-3. Report each iteration
-
-Stop when green. Ask for help if stuck.
-"""
-)
-```
-
-### Step 7: Report
-
-```
-## PR Ready for Review
-
-**PR**: #<number> - <title>
-**Task**: <tag>.<task-id>
-
-CI passing. Awaiting human review and merge.
-Run `/tm` again after merge to cleanup.
-```
+**After subagent returns**: Report its output and **terminate**.
 
 ---
 
-## WORKTREE MODES (Already in TM worktree)
+## WORKTREE MODES
 
 Derive context from path:
 ```bash
@@ -224,38 +216,41 @@ TASK_DIR=$(basename "$(pwd)")
 TASK_ID="${TASK_DIR%%--*}"
 ```
 
-### Check PR State
-
-```bash
-# Check if PR exists and its state
-gh pr view --json number,state,mergedAt,mergeable,mergeStateStatus,reviewDecision,isDraft 2>/dev/null
-```
-
-**Route by state:**
-
-| Condition | Mode |
-|-----------|------|
-| `mergedAt` is set | → CLEANUP |
-| PR exists, open | → REVIEW |
-| No PR, has commits | → CREATE_PR |
-| No PR, no commits | → IMPLEMENT |
-
 ---
 
-### Mode: CLEANUP (PR Merged)
+### Mode: CLEANUP → Launch cleanup-specialist
 
-```bash
-# 1. Mark task done
-task-master tags use "$TAG" && task-master set-status --id="$TASK_ID" --status=done
-
-# 2. Navigate out and cleanup
-WORKTREE_PATH=$(pwd)
-cd ~/dev/github.com/<org>/<repo>/<repo>-main
-git worktree remove "$WORKTREE_PATH"
-git branch -d "$TAG/$TASK_DIR"
 ```
+Task(
+  subagent_type: "general-purpose",
+  model: "sonnet",  # Lightweight task
+  prompt: """
+# Cleanup Specialist
 
-**Report:**
+The PR has been merged. Clean up the worktree and mark the task done.
+
+## Context
+- Tag: <tag>
+- Task ID: <task-id>
+- Worktree path: <current-path>
+- Repo main: ~/dev/github.com/<org>/<repo>/<repo>-main
+
+## Steps
+
+1. Mark task done:
+   ```bash
+   task-master tags use "<tag>" && task-master set-status --id="<task-id>" --status=done
+   ```
+
+2. Remove worktree:
+   ```bash
+   cd ~/dev/github.com/<org>/<repo>/<repo>-main
+   git worktree remove "<worktree-path>"
+   git branch -d "<tag>/<task-dir>"
+   ```
+
+## Output
+
 ```
 ## Task Complete
 
@@ -263,150 +258,309 @@ git branch -d "$TAG/$TASK_DIR"
 **Worktree**: Removed
 **Branch**: Deleted
 
-Next: `task-master next --tag <tag>` or `/tm <tag> <next-task>`
+Next: `/tm <tag> <next-task>` or `/tm` to see ready tasks
+```
+"""
+)
 ```
 
 ---
 
-### Mode: REVIEW (PR Open)
+### Mode: REVIEW → Launch review-specialist
 
-**Step 1: Check for merge conflicts FIRST**
-
-```bash
-# Get PR state including mergeable status
-PR_STATE=$(gh pr view --json mergeable,mergeStateStatus,baseRefName)
-MERGEABLE=$(echo "$PR_STATE" | jq -r '.mergeable')
-MERGE_STATUS=$(echo "$PR_STATE" | jq -r '.mergeStateStatus')
-BASE=$(echo "$PR_STATE" | jq -r '.baseRefName')
-
-# CONFLICTING or UNKNOWN means we need to resolve
-if [[ "$MERGEABLE" == "CONFLICTING" ]] || [[ "$MERGE_STATUS" == "DIRTY" ]]; then
-  echo "⚠️ MERGE CONFLICT DETECTED - resolving first"
-fi
-```
-
-**If conflicts exist, resolve BEFORE anything else:**
-```bash
-git fetch origin
-git merge origin/$BASE --no-edit
-# If merge fails with conflicts:
-#   1. Resolve conflicts in affected files
-#   2. git add <resolved-files>
-#   3. git commit (accept merge message)
-#   4. git push
-# Then re-run /tm to continue review
-```
-
-**Step 2: Check other states in priority order:**
-
-| Priority | State | Action |
-|----------|-------|--------|
-| 1 | Conflicts | Merge target into PR branch (handled above) |
-| 2 | CI failing | Fix CI |
-| 3 | Has actionable feedback | Polish (subagent) - includes "approved with suggestions" |
-| 4 | Waiting | Report "awaiting review" |
-| 5 | Draft | Ask if ready to publish |
-
-```bash
-# Gather ALL feedback
-gh pr checks
-
-# Inline comments (file-specific feedback)
-gh api repos/<owner>/<repo>/pulls/<number>/comments --jq '.[] | {author: .user.login, path, line, body: .body[0:150]}'
-
-# Conversation comments (general feedback)
-gh api repos/<owner>/<repo>/issues/<number>/comments --jq '.[] | {author: .user.login, body: .body[0:300]}'
-```
-
-**Check ALL feedback.** Someone took time to write it. Address it or explain why not.
-
-**CRITICAL: "Approved" does NOT mean done.** Reviewers often approve with suggestions. If ANY inline comment or review comment contains actionable feedback (code improvements, suggestions, questions), treat it as "Has actionable feedback" and implement before exiting.
-
-**What counts as actionable feedback:**
-- Code suggestions (from any reviewer or bot)
-- Questions about implementation ("Why not use X?", "Have you considered Y?")
-- Style/pattern suggestions
-- Performance or security observations
-- Any comment that implies the code could be better
-- **"Low priority" suggestions** - priority labels are about urgency, not importance. If it improves the code, implement it.
-
-**What is NOT actionable (OK to skip):**
-- Pure praise ("LGTM", "Nice work")
-- Acknowledgments ("Thanks for fixing this")
-- Questions already answered in the PR description
-- Suggestions explicitly marked as "nitpick - ignore if you disagree"
-
-**For ACTIONABLE FEEDBACK (regardless of approval status):**
 ```
 Task(
   subagent_type: "general-purpose",
   model: "opus",
   prompt: """
-Polish PR #<number>. This work is worth finishing well.
+# Review Specialist
 
-Working directory: <worktree-path>
-Task Master: <tag>.<task-id>
+An open PR needs attention. Check for issues and fix them autonomously.
 
-Feedback: <summarized>
+## Context
+- Tag: <tag>
+- Task ID: <task-id>
+- Working directory: <worktree-path>
+- PR number: <from gh pr view>
 
-For each piece of feedback:
-1. IMPLEMENT it - the default, because good suggestions make the code better
-2. Defer if genuinely out of scope - create a new Task Master task to track it:
-   `task-master add --title="<summary>" --description="From PR #<number> feedback: <detail>"`
-   New task = new PR (1:1 rule). This is autonomous - good feedback deserves proper tracking.
-3. Push back if you disagree - with clear reasoning
+## Priority Order
 
-Someone took time to leave this feedback. That's a gift. Use it.
+1. **Merge conflicts** (check first, fix before anything else)
+2. **CI failures**
+3. **Actionable feedback** (includes "approved with suggestions")
+4. **Waiting for review** (nothing to do)
 
-Fix, commit, push. Then verify no feedback remains unaddressed.
-"""
-)
+## Step 1: Check Merge Conflicts
+
+```bash
+PR_STATE=$(gh pr view --json mergeable,mergeStateStatus,baseRefName)
+MERGEABLE=$(echo "$PR_STATE" | jq -r '.mergeable')
+BASE=$(echo "$PR_STATE" | jq -r '.baseRefName')
+
+if [[ "$MERGEABLE" == "CONFLICTING" ]]; then
+  git fetch origin
+  git merge origin/$BASE --no-edit
+  # Resolve conflicts, commit, push
+fi
 ```
 
-**ONLY report ready when truly clean:**
+## Step 2: Check CI
+
+```bash
+gh pr checks
+```
+
+Fix any failures, commit, push.
+
+## Step 3: Check ALL Feedback
+
+```bash
+# Inline comments
+gh api repos/<owner>/<repo>/pulls/<number>/comments --jq '.[] | {author: .user.login, path, line, body: .body[0:200]}'
+
+# Conversation comments
+gh api repos/<owner>/<repo>/issues/<number>/comments --jq '.[] | {author: .user.login, body: .body[0:300]}'
+```
+
+**"Approved" does NOT mean done.** Check for suggestions even on approved PRs.
+
+**Actionable feedback includes:**
+- Code suggestions (from any source)
+- Questions about implementation
+- Style/pattern suggestions
+- Performance or security observations
+- "Low priority" suggestions - still worth implementing
+
+**NOT actionable (skip):**
+- Pure praise ("LGTM", "Nice work")
+- Acknowledgments
+- Explicit "nitpick - ignore if you disagree"
+
+## Step 4: Address Feedback
+
+For each piece of actionable feedback:
+
+### Option 1: IMPLEMENT (default)
+Good suggestions improve the code. Just do it.
+
+### Option 2: DEFER (genuinely out of scope)
+For suggestions that belong in future work:
+
+```bash
+# First, check if TM already tracks this
+task-master tags use "<tag>" && task-master list --json | jq '.[] | select(.title | test("<keyword>"; "i"))'
+
+# If similar task exists, update it with clarified requirements:
+task-master update-task --id="<existing-id>" --prompt="Add requirement from PR #<number> feedback: <detail>"
+
+# If no existing task, create new:
+task-master add --title="<summary>" --description="From PR #<number> feedback: <detail>"
+```
+
+Then reply inline on PR explaining the deferral:
+```bash
+gh api repos/<owner>/<repo>/pulls/<number>/comments \
+  --method POST \
+  -f body="Good suggestion! This is out of scope for this PR but I've tracked it as Task Master task <tag>.<task-id> for follow-up." \
+  -f commit_id="<commit_sha>" \
+  -f path="<file_path>" \
+  -f line=<line_number>
+```
+
+### Option 3: DISAGREE (with reasoning)
+If you genuinely disagree, reply inline with clear reasoning:
+
+```bash
+# For inline comments (file-specific):
+gh api repos/<owner>/<repo>/pulls/<number>/comments \
+  --method POST \
+  -f body="I considered this but chose the current approach because: <reasoning>. Happy to discuss if you see issues I'm missing." \
+  -f commit_id="<commit_sha>" \
+  -f path="<file_path>" \
+  -f line=<line_number>
+
+# For conversation comments (general discussion):
+gh api repos/<owner>/<repo>/issues/<number>/comments \
+  --method POST \
+  -f body="Re: <topic> - I considered this but chose the current approach because: <reasoning>."
+```
+
+**Never silently ignore feedback.** Every suggestion deserves a response - implementation, deferral with tracking, or respectful disagreement.
+
+Someone took time to write feedback. That's a gift. Use it.
+
+## Quality Loop (max 10 iterations)
+
+Repeat until:
+- CI passing
+- No merge conflicts
+- No unaddressed actionable feedback
+
+## Exit Conditions
+
+**Ready**:
 ```
 ## PR #<number> - Ready to Merge
 
 ✅ CI passing
 ✅ No merge conflicts
-✅ All suggestions implemented or explicitly deferred with reasoning
+✅ All feedback addressed
 
 Merge when ready, then run `/tm` to cleanup.
 ```
 
-**Note**: "Approved" signals no blockers, not completion. Suggestions that were worth writing are worth addressing. Stay in the loop until the code is actually polished, not just unblocked.
+**Waiting**:
+```
+## PR #<number> - Awaiting Review
+
+✅ CI passing
+✅ No merge conflicts
+⏳ No feedback yet
+
+Waiting for human review.
+```
+
+**Blocked**:
+```
+## PR #<number> - Needs Help
+
+Issues that need human input:
+- <issue>
+
+Run `/tm` again after resolving.
+```
+"""
+)
+```
 
 ---
 
-### Mode: CREATE_PR (Commits but no PR)
+### Mode: CREATE_PR → Launch pr-creator
 
-```bash
-git log origin/develop..HEAD --oneline  # Show what will be in PR
 ```
+Task(
+  subagent_type: "general-purpose",
+  model: "sonnet",  # Straightforward task
+  prompt: """
+# PR Creator
+
+Commits exist but no PR. Create one and run initial quality checks.
+
+## Context
+- Tag: <tag>
+- Task ID: <task-id>
+- Working directory: <worktree-path>
+
+## Steps
+
+1. Review commits:
+   ```bash
+   git log origin/develop..HEAD --oneline
+   ```
+
+2. Push and create PR:
+   ```bash
+   git push -u origin "<branch-name>"
+   gh pr create --title "<title>" --body "Task Master: <tag>.<task-id>\\n\\n<summary of changes>"
+   ```
+
+3. Wait for CI to start, then check:
+   ```bash
+   sleep 30
+   gh pr checks
+   ```
+
+4. If CI fails, fix and push.
+
+## Output
+
+```
+## PR Created
+
+**PR**: #<number> - <title>
+**Task**: <tag>.<task-id>
+
+CI status: <passing/pending/failing>
+
+Run `/tm` to continue monitoring.
+```
+"""
+)
+```
+
+---
+
+### Mode: IMPLEMENT → Launch implementation-specialist
 
 ```
 Task(
   subagent_type: "general-purpose",
   model: "opus",
   prompt: """
-Create PR for commits on this branch.
+# Implementation Specialist
 
-Working directory: <worktree-path>
-Task Master: <tag>.<task-id>
+Worktree exists but no commits yet. Continue implementation.
 
-Push and create PR with `gh pr create`. Include TM reference.
-Output PR_NUMBER and PR_URL.
+## Context
+- Tag: <tag>
+- Task ID: <task-id>
+- Working directory: <worktree-path>
+
+## Steps
+
+1. Get task details:
+   ```bash
+   task-master tags use "<tag>" && task-master show "<task-id>" --json
+   ```
+
+2. Implement the task:
+   - If subtasks exist: implement each, mark as `review` when done
+   - If no subtasks: implement the whole task
+   - Commit incrementally
+
+3. After implementation complete, create PR:
+   ```bash
+   git push -u origin "<branch-name>"
+   gh pr create --title "<title>" --body "Task Master: <tag>.<task-id>\\n\\n<description>"
+   ```
+
+4. Run quality loop (max 10 iterations):
+   - Check CI
+   - Check feedback
+   - Fix issues
+   - Repeat until green
+
+## Exit Conditions
+
+Same as start-specialist:
+- **Success**: PR created and passing
+- **Blocked**: Need human input
+- **Too Large**: Recommend decomposition
 """
 )
 ```
 
-Then enter quality loop.
-
 ---
 
-### Mode: IMPLEMENT (No commits yet)
+## Orchestrator Behavior Summary
 
-Continue implementation. Same as START Step 4-6.
+```
+/tm invoked
+    │
+    ├─ Detect context (quick bash commands)
+    │
+    ├─ Determine mode
+    │
+    ├─ Launch appropriate subagent
+    │   └─ Subagent works in isolated context
+    │   └─ Subagent returns status report
+    │
+    ├─ Report subagent output to user
+    │
+    └─ TERMINATE (don't continue processing)
+```
+
+**Key principle**: The orchestrator NEVER does heavy work itself. It detects, delegates, reports, terminates. Next `/tm` invocation starts fresh with minimal context.
 
 ---
 
@@ -422,34 +576,31 @@ Continue implementation. Same as START Step 4-6.
 | deferred    | Postponed for later                       |
 | cancelled   | Will not be done                          |
 
-**Key insight**: `review` status does NOT trigger parent auto-adjustment. This allows subtasks to be marked complete without prematurely marking the parent done.
-
 ## Task Status Lifecycle
 
 ```
 /tm starts (START)  → Task: pending → in-progress
 Implementation      → Subtasks: pending → review (code complete)
-All subtasks review → Parent: STAYS in-progress (no auto-adjustment)
+All subtasks review → Parent: STAYS in-progress
 PR created/polished → Parent: STAYS in-progress
 Human merges PR     → (no command runs)
 /tm after merge     → Parent: in-progress → done
 ```
 
-**Never mark subtasks `done` individually** - just set parent to `done` after PR merge.
-
 ---
 
 ## Error Handling
 
-- **Subagent fails**: Ask user - retry, skip, or abort
-- **Dependencies not met**: Report and ask
-- **Stuck after 10 iterations**: Ask for help
+- **Subagent reports blocked**: Surface to user, suggest next steps
+- **Subagent reports too large**: Surface to user, suggest decomposition
+- **Subagent fails entirely**: Report error, suggest retry
 
 ---
 
 ## Notes
 
-- **Context-aware**: Same command, behavior adapts to where you are
+- **Context-aware**: Same command, behavior adapts to state
+- **Context-safe**: Heavy work isolated in subagents
 - **Human merges**: Never merge automatically
 - **Subagents can bail**: If work too large, report and suggest decomposition
-- **Reviewer feedback**: Treat all feedback seriously. If someone took time to write it, it's worth addressing.
+- **Fresh starts**: Each `/tm` invocation is lightweight, reads current state fresh
