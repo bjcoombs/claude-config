@@ -9,9 +9,12 @@ argument-hint: [tag task-id] (optional - derives context from worktree if omitte
 
 > **Design principle**: This is a thin orchestration layer. All heavy work happens in subagents with isolated context windows. The orchestrator detects state, launches the right subagent, receives a status report, and terminates. This prevents context exhaustion during long-running tasks.
 
-> **CRITICAL - Model Selection**: When launching Task(), you MUST pass the `model` parameter exactly as specified below. Do NOT default to a different model. The model choices are deliberate:
-> - **opus** for tasks requiring code analysis, implementation, or complex reasoning
-> - **sonnet** only for simple operations (cleanup, PR creation with no code changes)
+> **Model Selection**: Complexity is often unknown upfront. Use adaptive patterns:
+> - **Orchestrator subagents** (sonnet): Gather info, categorize, delegate
+> - **Worker subagents** (opus): Spawned by orchestrators for complex code changes
+> - **Simple tasks** (sonnet): Cleanup, PR creation, config changes
+>
+> This lets cost scale with actual complexity rather than worst-case assumptions.
 
 ---
 
@@ -115,63 +118,90 @@ Run `/tm <tag> <task-id>` to start a task.
 
 Extract tag and task-id from arguments, then:
 
-**REQUIRED: Use model: "opus"** - This task implements code.
-
 ```
 Task(
   subagent_type: "general-purpose",
-  model: "opus",  # REQUIRED - do not change
+  model: "sonnet",  # Orchestrator - spawns opus for implementation
   prompt: """
-# Start Specialist
+# Start Specialist (Orchestrator)
 
-You are starting a new Task Master task. Work autonomously until the task is ready for human review.
+You orchestrate starting a new Task Master task. Do setup yourself, delegate implementation to opus.
 
 ## Context
 - Tag: <tag>
 - Task ID: <task-id>
 - Repo root: ~/dev/github.com/<org>/<repo>
 
-## Your Mission
+## Phase 1: Setup (do yourself - simple operations)
 
-1. **Setup** (do this first):
-   ```bash
-   cd ~/dev/github.com/<org>/<repo>/<repo>-main
-   git checkout develop && git pull origin develop
-   task-master tags use "<tag>"
-   task-master show "<task-id>" --json
-   ```
+```bash
+cd ~/dev/github.com/<org>/<repo>/<repo>-main
+git checkout develop && git pull origin develop
+task-master tags use "<tag>"
+task-master show "<task-id>" --json
+```
 
-2. **Analyze complexity** (if missing):
-   ```bash
-   task-master analyze-complexity --id="<task-id>" --research
-   ```
+If task lacks complexity analysis:
+```bash
+task-master analyze-complexity --id="<task-id>" --research
+```
 
-3. **Create worktree**:
-   ```bash
-   git branch "<tag>/<task-id>--<slug>"
-   mkdir -p ../worktree/"<tag>"
-   git worktree add ../worktree/"<tag>"/"<task-id>--<slug>" "<tag>/<task-id>--<slug>"
-   cd ../worktree/"<tag>"/"<task-id>--<slug>"
-   task-master set-status --id="<task-id>" --status=in-progress
-   ```
+Create worktree:
+```bash
+git branch "<tag>/<task-id>--<slug>"
+mkdir -p ../worktree/"<tag>"
+git worktree add ../worktree/"<tag>"/"<task-id>--<slug>" "<tag>/<task-id>--<slug>"
+cd ../worktree/"<tag>"/"<task-id>--<slug>"
+task-master set-status --id="<task-id>" --status=in-progress
+```
 
-4. **Implement**:
-   - If task has subtasks: implement each, marking as `review` when done
-   - If no subtasks: implement the whole task
-   - Commit incrementally with good messages
+## Phase 2: Implementation (spawn opus subagent)
 
-5. **Create PR**:
-   ```bash
-   git push -u origin "<tag>/<task-id>--<slug>"
-   gh pr create --title "<title>" --body "Task Master: <tag>.<task-id>\\n\\n<description>"
-   ```
+**Do NOT implement code yourself.** Spawn an opus subagent:
 
-6. **Quality loop** (max 10 iterations):
-   - Check CI: `gh pr checks`
-   - Check inline comments: `gh api repos/<owner>/<repo>/pulls/<number>/comments`
-   - Check conversation: `gh api repos/<owner>/<repo>/issues/<number>/comments`
-   - Fix any issues, commit, push
-   - Repeat until green
+```
+Task(
+  subagent_type: "general-purpose",
+  model: "opus",  # Implementation needs opus
+  prompt: \"\"\"
+# Implement Task <task-id>
+
+## Context
+- Working directory: <worktree-path>
+- Task: <task title and description>
+- Subtasks: <if any>
+
+## Instructions
+- If subtasks exist: implement each, mark as `review` when done
+- If no subtasks: implement the whole task
+- Commit incrementally with good messages
+- Do NOT push or create PR (orchestrator handles that)
+
+## Output
+Report what was implemented and any blockers.
+\"\"\"
+)
+```
+
+## Phase 3: Create PR (do yourself - simple)
+
+```bash
+git push -u origin "<tag>/<task-id>--<slug>"
+gh pr create --title "<title>" --body "Task Master: <tag>.<task-id>\\n\\n<description>"
+```
+
+## Phase 4: Quality Loop (spawn review-specialist pattern)
+
+For each iteration, assess issues:
+- **Simple** (CI config, typo): fix yourself
+- **Complex** (code logic): spawn opus subagent
+
+```bash
+gh pr checks
+gh api repos/<owner>/<repo>/pulls/<number>/comments
+```
+
+Max 10 iterations. If stuck, report blocked.
 
 ## Exit Conditions
 
@@ -274,16 +304,16 @@ Next: `/tm <tag> <next-task>` or `/tm` to see ready tasks
 
 ### Mode: REVIEW → Launch review-specialist
 
-**REQUIRED: Use model: "opus"** - This task analyzes feedback and fixes code.
+Uses sonnet for lightweight orchestration, spawns opus subagents only for complex fixes.
 
 ```
 Task(
   subagent_type: "general-purpose",
-  model: "opus",  # REQUIRED - do not change
+  model: "sonnet",  # Lightweight orchestrator
   prompt: """
-# Review Specialist
+# Review Specialist (Orchestrator)
 
-An open PR needs attention. Check for issues and fix them autonomously.
+You are a lightweight orchestrator. Gather feedback, categorize issues, and delegate complex fixes to opus subagents.
 
 ## Context
 - Tag: <tag>
@@ -291,118 +321,113 @@ An open PR needs attention. Check for issues and fix them autonomously.
 - Working directory: <worktree-path>
 - PR number: <from gh pr view>
 
-## Priority Order
-
-1. **Merge conflicts** (check first, fix before anything else)
-2. **CI failures**
-3. **Actionable feedback** (includes "approved with suggestions")
-4. **Waiting for review** (nothing to do)
-
-## Step 1: Check Merge Conflicts
+## Step 1: Gather State (Quick Checks)
 
 ```bash
-PR_STATE=$(gh pr view --json mergeable,mergeStateStatus,baseRefName)
-MERGEABLE=$(echo "$PR_STATE" | jq -r '.mergeable')
-BASE=$(echo "$PR_STATE" | jq -r '.baseRefName')
+# Merge conflicts
+gh pr view --json mergeable,mergeStateStatus,baseRefName
 
-if [[ "$MERGEABLE" == "CONFLICTING" ]]; then
-  git fetch origin
-  git merge origin/$BASE --no-edit
-  # Resolve conflicts, commit, push
-fi
-```
-
-## Step 2: Check CI
-
-```bash
+# CI status
 gh pr checks
-```
 
-Fix any failures, commit, push.
-
-## Step 3: Check ALL Feedback
-
-```bash
 # Inline comments
-gh api repos/<owner>/<repo>/pulls/<number>/comments --jq '.[] | {author: .user.login, path, line, body: .body[0:200]}'
+gh api repos/<owner>/<repo>/pulls/<number>/comments --jq '.[] | {author: .user.login, path, line, body: .body[0:300]}'
 
 # Conversation comments
 gh api repos/<owner>/<repo>/issues/<number>/comments --jq '.[] | {author: .user.login, body: .body[0:300]}'
 ```
 
-**"Approved" does NOT mean done.** Check for suggestions even on approved PRs.
+## Step 2: Categorize Each Issue
 
-**Actionable feedback includes:**
-- Code suggestions (from any source)
-- Questions about implementation
-- Style/pattern suggestions
-- Performance or security observations
-- "Low priority" suggestions - still worth implementing
+For each issue found, categorize:
 
-**NOT actionable (skip):**
-- Pure praise ("LGTM", "Nice work")
-- Acknowledgments
-- Explicit "nitpick - ignore if you disagree"
+| Category | Examples | Action |
+|----------|----------|--------|
+| **Simple** | Typo, rename, config change, add comment | Fix yourself |
+| **Complex** | Logic change, new code, refactor, bug fix | Spawn opus subagent |
+| **Defer** | Out of scope for this PR | Track in TM, reply on PR |
+| **Disagree** | Valid reasoning to keep current approach | Reply on PR with reasoning |
 
-## Step 4: Address Feedback
+## Step 3: Handle Simple Issues Yourself
 
-For each piece of actionable feedback:
+For simple fixes (typos, config, comments, renames), just do them:
+- Edit the file
+- Commit with clear message
+- Push
 
-### Option 1: IMPLEMENT (default)
-Good suggestions improve the code. Just do it.
+## Step 4: Spawn Opus Subagents for Complex Issues
 
-### Option 2: DEFER (genuinely out of scope)
-For suggestions that belong in future work:
+**Do NOT attempt complex code changes yourself.** Spawn a dedicated subagent:
+
+```
+Task(
+  subagent_type: "general-purpose",
+  model: "opus",  # Complex work needs opus
+  prompt: \"\"\"
+# Fix: <brief description>
+
+## Context
+- Working directory: <worktree-path>
+- File: <file-path>
+- Issue: <description from feedback>
+
+## Task
+<specific fix required>
+
+## Constraints
+- Fix ONLY this specific issue
+- Commit when done with message: "fix: <description>"
+- Do not push (orchestrator will batch push)
+
+## Output
+Report: fixed | blocked (with reason)
+\"\"\"
+)
+```
+
+Wait for each subagent to complete before proceeding.
+
+## Step 5: Handle Deferrals
+
+For out-of-scope suggestions:
 
 ```bash
-# First, check if TM already tracks this
+# Check if TM already tracks this
 task-master tags use "<tag>" && task-master list --json | jq '.[] | select(.title | test("<keyword>"; "i"))'
 
-# If similar task exists, update it with clarified requirements:
-task-master update-task --id="<existing-id>" --prompt="Add requirement from PR #<number> feedback: <detail>"
+# If exists, update:
+task-master update-task --id="<existing-id>" --prompt="Add requirement from PR #<number>: <detail>"
 
-# If no existing task, create new:
-task-master add --title="<summary>" --description="From PR #<number> feedback: <detail>"
+# If not, create:
+task-master add --title="<summary>" --description="From PR #<number>: <detail>"
 ```
 
-Then reply inline on PR explaining the deferral:
+Reply on PR:
 ```bash
-gh api repos/<owner>/<repo>/pulls/<number>/comments \
-  --method POST \
-  -f body="Good suggestion! This is out of scope for this PR but I've tracked it as Task Master task <tag>.<task-id> for follow-up." \
-  -f commit_id="<commit_sha>" \
-  -f path="<file_path>" \
-  -f line=<line_number>
+gh api repos/<owner>/<repo>/pulls/<number>/comments --method POST \
+  -f body="Good suggestion! Tracked as Task Master task <tag>.<task-id> for follow-up." \
+  -f commit_id="<sha>" -f path="<file>" -f line=<line>
 ```
 
-### Option 3: DISAGREE (with reasoning)
-If you genuinely disagree, reply inline with clear reasoning:
+## Step 6: Handle Disagreements
 
+Reply with clear reasoning:
 ```bash
-# For inline comments (file-specific):
-gh api repos/<owner>/<repo>/pulls/<number>/comments \
-  --method POST \
-  -f body="I considered this but chose the current approach because: <reasoning>. Happy to discuss if you see issues I'm missing." \
-  -f commit_id="<commit_sha>" \
-  -f path="<file_path>" \
-  -f line=<line_number>
-
-# For conversation comments (general discussion):
-gh api repos/<owner>/<repo>/issues/<number>/comments \
-  --method POST \
-  -f body="Re: <topic> - I considered this but chose the current approach because: <reasoning>."
+gh api repos/<owner>/<repo>/pulls/<number>/comments --method POST \
+  -f body="I considered this but chose the current approach because: <reasoning>. Happy to discuss." \
+  -f commit_id="<sha>" -f path="<file>" -f line=<line>
 ```
 
-**Never silently ignore feedback.** Every suggestion deserves a response - implementation, deferral with tracking, or respectful disagreement.
+## Step 7: Final Push and Verify
 
-Someone took time to write feedback. That's a gift. Use it.
+After all fixes (yours and subagents'):
+```bash
+git push
+sleep 30
+gh pr checks
+```
 
-## Quality Loop (max 10 iterations)
-
-Repeat until:
-- CI passing
-- No merge conflicts
-- No unaddressed actionable feedback
+If CI fails, analyze and either fix (simple) or spawn subagent (complex).
 
 ## Exit Conditions
 
@@ -424,19 +449,19 @@ Merge when ready, then run `/tm` to cleanup.
 ✅ CI passing
 ✅ No merge conflicts
 ⏳ No feedback yet
-
-Waiting for human review.
 ```
 
 **Blocked**:
 ```
 ## PR #<number> - Needs Help
 
-Issues that need human input:
+Issues needing human input:
 - <issue>
-
-Run `/tm` again after resolving.
 ```
+
+## Key Principle
+
+You are an orchestrator, not a hero. Simple stuff: do it. Complex stuff: delegate to opus. This keeps your context light and ensures quality fixes.
 """
 )
 ```
@@ -500,49 +525,65 @@ Run `/tm` to continue monitoring.
 
 ### Mode: IMPLEMENT → Launch implementation-specialist
 
-**REQUIRED: Use model: "opus"** - This task implements code.
+Worktree exists but no commits. Uses same orchestrator pattern as start-specialist.
 
 ```
 Task(
   subagent_type: "general-purpose",
-  model: "opus",  # REQUIRED - do not change
+  model: "sonnet",  # Orchestrator - spawns opus for implementation
   prompt: """
-# Implementation Specialist
+# Implementation Specialist (Orchestrator)
 
-Worktree exists but no commits yet. Continue implementation.
+Worktree exists but no commits yet. Orchestrate implementation.
 
 ## Context
 - Tag: <tag>
 - Task ID: <task-id>
 - Working directory: <worktree-path>
 
-## Steps
+## Phase 1: Get Task Details (do yourself)
 
-1. Get task details:
-   ```bash
-   task-master tags use "<tag>" && task-master show "<task-id>" --json
-   ```
+```bash
+task-master tags use "<tag>" && task-master show "<task-id>" --json
+```
 
-2. Implement the task:
-   - If subtasks exist: implement each, mark as `review` when done
-   - If no subtasks: implement the whole task
-   - Commit incrementally
+## Phase 2: Implementation (spawn opus subagent)
 
-3. After implementation complete, create PR:
-   ```bash
-   git push -u origin "<branch-name>"
-   gh pr create --title "<title>" --body "Task Master: <tag>.<task-id>\\n\\n<description>"
-   ```
+**Do NOT implement code yourself.** Spawn an opus subagent:
 
-4. Run quality loop (max 10 iterations):
-   - Check CI
-   - Check feedback
-   - Fix issues
-   - Repeat until green
+```
+Task(
+  subagent_type: "general-purpose",
+  model: "opus",
+  prompt: \"\"\"
+# Implement Task <task-id>
+
+## Context
+- Working directory: <worktree-path>
+- Task: <task details>
+
+## Instructions
+- If subtasks: implement each, mark as `review` when done
+- If no subtasks: implement whole task
+- Commit incrementally
+- Do NOT push (orchestrator handles that)
+\"\"\"
+)
+```
+
+## Phase 3: Create PR (do yourself)
+
+```bash
+git push -u origin "<branch-name>"
+gh pr create --title "<title>" --body "Task Master: <tag>.<task-id>\\n\\n<description>"
+```
+
+## Phase 4: Quality Loop
+
+Same as review-specialist: assess issues, fix simple ones yourself, spawn opus for complex.
 
 ## Exit Conditions
 
-Same as start-specialist:
 - **Success**: PR created and passing
 - **Blocked**: Need human input
 - **Too Large**: Recommend decomposition
