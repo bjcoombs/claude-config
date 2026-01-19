@@ -141,7 +141,13 @@ Task(
   prompt: """
 # Cleanup <tag>.<task-id>
 
-PR merged. Mark task done in TM, remove worktree from <repo>-main, delete branch. Report complete.
+PR merged. Clean up in this order:
+1. cd to <repo>-main FIRST (you're about to delete current directory)
+2. Mark task done: `task-master tags use "<tag>" && task-master set-status --id=<task-id> --status=done`
+3. Remove worktree: `git worktree remove ../worktree/<tag>/<task-id>--<slug>`
+4. Delete branch: `git branch -d <branch-name>`
+
+Report complete.
 """
 )
 ```
