@@ -340,11 +340,27 @@ gh api repos/<owner>/<repo>/issues/<number>/comments --jq '.[] | {author: .user.
 task-master tags use "<tag>" && task-master list --json
 ```
 
-## Step 2: Track What You've Addressed
+## Step 2: Build Issue Tracker with TodoWrite
 
-**Avoid infinite loops:** Keep a mental list of issues you've addressed THIS session. Don't re-address the same issue twice.
+**Use TodoWrite to track issues explicitly.** This prevents loops and gives visibility.
 
-Before processing feedback, note the comment timestamps/IDs. After pushing fixes, only look at NEW comments (posted after your push).
+After gathering feedback, create a todo for each actionable item:
+
+```python
+TodoWrite([
+    {"content": "comment-123: Add error handling to fetchData", "status": "pending", "activeForm": "Fixing error handling"},
+    {"content": "comment-456: Typo in README", "status": "pending", "activeForm": "Fixing typo"},
+    {"content": "ci-failure: Test timeout in auth_test.go", "status": "pending", "activeForm": "Fixing test timeout"},
+])
+```
+
+**Mark items as you address them:**
+- `in_progress` when starting
+- `completed` when done (committed)
+
+**After pushing, re-gather feedback.** Only add NEW comments to the todo (check timestamps). If an item is already in your todo (by comment ID or description), don't add it again.
+
+**Exit when:** All todos completed AND no new feedback after push.
 
 ## Step 3: Categorize Each Issue
 
@@ -369,7 +385,11 @@ For simple fixes (typos, config, comments, renames), just do them:
 
 ## Step 5: Spawn Opus Subagents for Complex Issues
 
-**Do NOT attempt complex code changes yourself.** Spawn a dedicated subagent:
+**Do NOT attempt complex code changes yourself.** For each complex issue:
+
+1. Mark the todo item `in_progress`
+2. Spawn opus subagent with specific context
+3. When subagent returns, mark todo `completed` (or note if blocked)
 
 ```
 Task(
@@ -382,6 +402,7 @@ Task(
 - Working directory: <worktree-path>
 - File: <file-path>
 - Issue: <description from feedback>
+- Todo reference: <comment-id or description>
 
 ## Task
 <specific fix required>
@@ -392,12 +413,18 @@ Task(
 - Do not push (orchestrator will batch push)
 
 ## Output
-Report: fixed | blocked (with reason)
+Report exactly one of:
+- FIXED: <what was done>
+- BLOCKED: <why, what's needed>
 \"\"\"
 )
 ```
 
-Wait for each subagent to complete before proceeding.
+**After subagent returns:**
+- FIXED → Mark todo `completed`, continue to next issue
+- BLOCKED → Note in todo, may need human input
+
+Process issues sequentially so you can update the todo after each one.
 
 ## Step 6: Handle Deferrals
 
