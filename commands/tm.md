@@ -11,27 +11,15 @@ argument-hint: [tag task-id] (optional - derives context from worktree if omitte
 
 ---
 
-## Phase 0: Detect Context (Lightweight - Always in Main Agent)
+## Phase 0: Detect Context
 
-**Priority order:**
+**If `$ARGUMENTS` is empty:** Skip all context detection. Just list ready tasks and let user choose. This prevents conversation context from auto-adopting tasks.
 
-1. **Conversation context** - Recent "📍 Current Work" footer with active task/PR?
-2. **Current directory** - pwd matches TM worktree pattern?
-3. **Arguments** - Explicit tag/task-id provided?
+**If `$ARGUMENTS` provided:** Check context in order:
+1. Current directory - pwd matches TM worktree pattern?
+2. Arguments - Explicit tag/task-id provided?
 
-### Step 0.1: Check Conversation Context First
-
-Before checking pwd, notice if recent messages show active TM work:
-- Recent "📍 Current Work" footer with PR/task and worktree path?
-- Just pushed/created a PR?
-- Just reported "ready for review"?
-
-**If conversation shows active work but pwd is NOT that worktree:**
-```bash
-cd ~/dev/github.com/<org>/<repo>/worktree/<tag>/<task-id>--<slug>
-```
-
-### Step 0.2: Detect Current State
+### Detect Worktree Pattern
 
 ```bash
 pwd
@@ -53,21 +41,6 @@ Is current directory a TM worktree?
 └─ NO → START mode
     ├─ Args given    → Launch start-specialist
     └─ No args       → Report ready tasks (no subagent needed)
-```
-
-### Detect Worktree Pattern
-
-```bash
-CURRENT=$(pwd)
-if [[ "$CURRENT" =~ worktree/([^/]+)/([0-9.]+)-- ]]; then
-  TAG="${BASH_REMATCH[1]}"
-  TASK_ID="${BASH_REMATCH[2]}"
-  echo "TM Context: tag=$TAG task=$TASK_ID"
-  # → Route to appropriate subagent
-else
-  echo "Not in TM worktree"
-  # → START mode
-fi
 ```
 
 ### Check PR State (Quick - No Heavy Processing)
