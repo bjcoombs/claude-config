@@ -2,7 +2,47 @@
 
 Enter autonomous PR fixing loop for the current branch's PR until all checks pass.
 
-## Protocol
+---
+
+## Check for Ralph Plugin
+
+```bash
+ls ~/.claude/plugins/cache/claude-plugins-official/ralph-loop/*/commands/ralph-loop.md 2>/dev/null && echo "RALPH_AVAILABLE" || echo "RALPH_NOT_AVAILABLE"
+```
+
+**If Ralph available:** Use Ralph for iteration (preserves context between iterations):
+
+```
+Skill(
+  skill: "ralph-loop:ralph-loop",
+  args: """
+Fix PR autonomously until all checks pass.
+
+## Each Iteration
+1. Get PR: `gh pr view --json number,title,headRefName`
+2. Check CI: `gh pr checks <number>`
+3. Check inline comments: `gh api repos/{owner}/{repo}/pulls/<number>/comments`
+4. Check conversation: `gh pr view <number> --comments`
+5. If failures or unresolved bot comments:
+   - Analyze and fix
+   - Commit and push
+   - Wait 30s for CI
+   - Continue loop
+6. If all passing and no bot comments, done
+
+Report each iteration: 🔄 Iteration N: Fixed X issues
+
+Output <promise>PR_READY</promise> when all checks pass and no unresolved comments.
+--max-iterations 10 --completion-promise PR_READY
+"""
+)
+```
+
+**If Ralph NOT available:** Use manual loop below (⚠️ may burn context on many iterations).
+
+---
+
+## Protocol (Fallback without Ralph)
 
 1. **Initial Check** (Iteration 0):
    - Get current PR number
