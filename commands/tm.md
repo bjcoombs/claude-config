@@ -40,10 +40,10 @@ Is current directory a TM worktree (or cd'd to one via conversation context)?
 │   ├─ PR merged      → Launch cleanup-specialist
 │   ├─ PR open        → Launch review-specialist
 │   ├─ Commits, no PR → Launch pr-creator
-│   └─ No commits     → Launch implementation-specialist
+│   └─ No commits     → Invoke Ralph for TDD implementation
 │
 └─ NO → START mode
-    ├─ Args given    → Launch start-specialist
+    ├─ Args given    → Setup worktree, then invoke Ralph
     └─ No args       → Report ready tasks (no subagent needed)
 ```
 
@@ -56,12 +56,12 @@ Is current directory a TM worktree (or cd'd to one via conversation context)?
 gh pr view --json number,state,mergedAt 2>/dev/null
 ```
 
-| Condition | Subagent to Launch |
-|-----------|-------------------|
-| `mergedAt` is set | `cleanup-specialist` |
-| PR exists, open | `review-specialist` |
-| No PR, has commits | `pr-creator` |
-| No PR, no commits | `implementation-specialist` |
+| Condition | Action |
+|-----------|--------|
+| `mergedAt` is set | Launch `cleanup-specialist` |
+| PR exists, open | Launch `review-specialist` |
+| No PR, has commits | Launch `pr-creator` |
+| No PR, no commits | Invoke Ralph for TDD |
 
 ---
 
@@ -86,38 +86,59 @@ Run `/tm <tag> <task-id>` to start a task.
 
 **Do NOT launch subagent.** User chooses, then re-runs `/tm` with args.
 
-### With Arguments → Launch start-specialist
+### With Arguments → Setup then Ralph
 
-Extract tag and task-id from arguments, then:
+Extract tag and task-id from arguments.
 
-```
-Task(
-  subagent_type: "general-purpose",
-  model: "sonnet",
-  prompt: """
-# Start Task <task-id>
+**Step 1: Setup (quick, no subagent needed)**
 
-Tag: <tag>
-Repo: ~/dev/github.com/<org>/<repo>
-
-You're an orchestrator. Do setup yourself, spawn opus for implementation.
-
-## Setup (do yourself)
-1. From <repo>-main: checkout develop, pull, create branch and worktree
-2. `task-master set-status --id="<task-id>" --status=in-progress`
-
-## Implementation (spawn opus)
-```
-Task(model: "opus", prompt: "Implement task <task-id>: <description>. Working dir: <path>. Commit incrementally, don't push.")
+```bash
+cd ~/dev/github.com/<org>/<repo>/<repo>-main
+git checkout develop && git pull origin develop
+git branch <tag>/<task-id>--<slug>
+mkdir -p ../worktree/<tag>
+git worktree add ../worktree/<tag>/<task-id>--<slug> <tag>/<task-id>--<slug>
+cd ../worktree/<tag>/<task-id>--<slug>
+task-master tags use "<tag>" && task-master set-status --id="<task-id>" --status=in-progress
 ```
 
-## After implementation
-1. Push and create PR with `gh pr create`
-2. Monitor CI, fix issues (simple yourself, complex spawn opus)
-3. Report: PR ready, blocked, or task too large
+**Step 2: Get task details for Ralph prompt**
+
+```bash
+task-master show <task-id> --json
+```
+
+**Step 3: Invoke Ralph for TDD implementation**
+
+```
+Skill(
+  skill: "ralph-loop:ralph-loop",
+  args: """
+Implement <tag>.<task-id>: <task-title>
+
+Working directory: <worktree-path>
+
+## Requirements
+<task-description-and-subtasks>
+
+## TDD Loop
+1. Run tests for affected code
+2. If tests fail, fix the code
+3. If tests pass but coverage low, add tests
+4. Commit incrementally with clear messages
+
+## Completion Criteria
+- All tests passing
+- All subtasks addressed
+- Code committed
+
+Output <promise>IMPLEMENTATION_COMPLETE</promise> when done.
+--max-iterations 30 --completion-promise IMPLEMENTATION_COMPLETE
 """
 )
 ```
+
+After Ralph completes, report: "Implementation complete. Run `/tm` to create PR."
 
 ---
 
@@ -211,33 +232,57 @@ Commits exist, no PR yet. Push, create PR (include TM reference in body), check 
 
 ---
 
-### Mode: IMPLEMENT → Launch implementation-specialist
+### Mode: IMPLEMENT → Invoke Ralph Loop for TDD
 
-Worktree exists but no commits. Same pattern as start-specialist:
+Worktree exists but no commits. Use Ralph for iterative TDD:
+
+```bash
+# Get task details for the prompt
+task-master tags use "<tag>" && task-master show <task-id> --json
+```
+
+Then invoke Ralph directly (not via subagent):
 
 ```
-Task(
-  subagent_type: "general-purpose",
-  model: "sonnet",
-  prompt: """
-# Continue Task <task-id>
+Skill(
+  skill: "ralph-loop:ralph-loop",
+  args: """
+Implement <tag>.<task-id>: <task-title>
 
 Working directory: <worktree-path>
-Task Master: <tag>.<task-id>
 
-Worktree exists, no commits yet. Spawn opus to implement, then create PR and monitor CI.
+## Requirements
+<task-description-and-subtasks>
 
-Same flow as start-specialist: spawn opus for code, do PR/CI yourself, report ready/blocked/too-large.
+## TDD Loop
+1. Run tests: <test-command>
+2. If tests fail, fix the code
+3. If tests pass but coverage low, add tests
+4. Commit incrementally with clear messages
+5. Repeat until all requirements met
+
+## Completion Criteria
+- All tests passing
+- All subtasks addressed
+- Code committed
+
+Output <promise>IMPLEMENTATION_COMPLETE</promise> when done.
+--max-iterations 30 --completion-promise IMPLEMENTATION_COMPLETE
 """
 )
 ```
+
+After Ralph completes, report: "Implementation complete. Run `/tm` to create PR."
 
 ---
 
 ## Orchestrator Flow
 
 ```
-/tm → detect context → launch subagent → report result → terminate
+/tm → detect context → route:
+  ├─ Implementation needed → invoke Ralph (TDD loop)
+  ├─ PR work needed → launch subagent (review/cleanup/pr-create)
+  └─ No context → list ready tasks
 ```
 
 ---
