@@ -340,20 +340,15 @@ gh api repos/<owner>/<repo>/issues/<number>/comments --jq '.[] | {author: .user.
 task-master tags use "<tag>" && task-master list --json
 ```
 
-## Exit Early If Clean
+## Step 2: Track What You've Addressed
 
-**STOP HERE if all true:**
-- CI passing
-- No merge conflicts
-- No UNADDRESSED human comments (bot suggestions alone don't block)
+**Avoid infinite loops:** Keep a mental list of issues you've addressed THIS session. Don't re-address the same issue twice.
 
-Report "Ready to merge" and exit. Don't look for more things to fix.
+Before processing feedback, note the comment timestamps/IDs. After pushing fixes, only look at NEW comments (posted after your push).
 
-## Step 2: Categorize Each Issue
+## Step 3: Categorize Each Issue
 
-**Only process issues from HUMANS.** Bot suggestions (CodeRabbit, Claude, etc.) are informational, not blocking.
-
-For each HUMAN issue found, categorize:
+**All feedback is worth considering** - human or AI collaborator. For each issue:
 
 | Category | Examples | Action |
 |----------|----------|--------|
@@ -365,14 +360,14 @@ For each HUMAN issue found, categorize:
 
 **Check TM before creating tasks:** If a suggestion matches an existing task title/description, reference that task instead of creating a duplicate.
 
-## Step 3: Handle Simple Issues Yourself
+## Step 4: Handle Simple Issues Yourself
 
 For simple fixes (typos, config, comments, renames), just do them:
 - Edit the file
 - Commit with clear message
 - Push
 
-## Step 4: Spawn Opus Subagents for Complex Issues
+## Step 5: Spawn Opus Subagents for Complex Issues
 
 **Do NOT attempt complex code changes yourself.** Spawn a dedicated subagent:
 
@@ -404,7 +399,7 @@ Report: fixed | blocked (with reason)
 
 Wait for each subagent to complete before proceeding.
 
-## Step 5: Handle Deferrals
+## Step 6: Handle Deferrals
 
 For out-of-scope suggestions:
 
@@ -426,7 +421,7 @@ gh api repos/<owner>/<repo>/pulls/<number>/comments --method POST \
   -f commit_id="<sha>" -f path="<file>" -f line=<line>
 ```
 
-## Step 6: Handle Disagreements
+## Step 7: Handle Disagreements
 
 Reply with clear reasoning:
 ```bash
@@ -435,7 +430,7 @@ gh api repos/<owner>/<repo>/pulls/<number>/comments --method POST \
   -f commit_id="<sha>" -f path="<file>" -f line=<line>
 ```
 
-## Step 7: Final Push and Verify
+## Step 8: Final Push and Verify
 
 After all fixes (yours and subagents'):
 ```bash
@@ -478,15 +473,18 @@ Issues needing human input:
 
 ## Key Principles
 
-1. **Good enough is good enough.** CI green + no human blockers = done. Don't gold-plate.
+1. **All collaborators are equal.** Human or AI feedback - if it's a good point, address it.
 
-2. **Bot suggestions are informational, not blocking.** CodeRabbit, Claude, etc. provide ideas. Humans decide what's required.
+2. **Don't loop on the same issue.** Track what you've addressed. After pushing, only look at NEW comments.
 
-3. **TM is the source of truth for future work.** Check it before suggesting. Reference it instead of duplicating.
+3. **TM is the source of truth for future work.** Check it before suggesting. Reference existing tasks instead of duplicating.
 
 4. **You're an orchestrator, not a hero.** Simple: do it. Complex: delegate. Unknown: ask.
 
-5. **Time-box yourself.** If you've been running >5 minutes without progress, report status and exit.
+5. **Exit conditions:**
+   - CI passing + no unaddressed feedback = done
+   - Same issue appearing twice = you're in a loop, stop and report
+   - 3 iterations without new progress = stop and report status
 """
 )
 ```
