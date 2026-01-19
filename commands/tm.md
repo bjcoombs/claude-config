@@ -7,11 +7,22 @@ argument-hint: [tag task-id] (optional - derives context from worktree if omitte
 
 **$ARGUMENTS**
 
-> Thin orchestrator. Sonnet subagents delegate complex code to opus. Cost scales with actual complexity.
+> Thin orchestrator. Uses Ralph Loop for iteration when available, falls back to subagents.
 
 ---
 
-## Phase 0: Detect Context
+## Phase 0: Detect Ralph Plugin
+
+```bash
+ls ~/.claude/plugins/cache/claude-plugins-official/ralph-loop/*/commands/ralph-loop.md 2>/dev/null && echo "RALPH_AVAILABLE" || echo "RALPH_NOT_AVAILABLE"
+```
+
+Set `$RALPH_AVAILABLE` based on result. If Ralph not available, warn once:
+> ⚠️ Ralph Loop plugin not installed. Using subagents (may burn context on long test runs). Install: `/plugin install ralph-loop`
+
+---
+
+## Phase 1: Detect Context
 
 **Check in order:**
 1. Current directory - pwd matches TM worktree pattern?
@@ -37,12 +48,12 @@ Is current directory a TM worktree (or cd'd to one via conversation context)?
 (Pattern: worktree/<tag>/<task-id>--<slug>)
 │
 ├─ YES → Check PR state (quick gh commands only)
-│   ├─ PR merged → Launch cleanup-specialist (subagent)
-│   ├─ PR open   → Invoke Ralph for review loop
-│   └─ No PR     → Invoke Ralph for full cycle (implement → PR → review)
+│   ├─ PR merged → Launch cleanup-specialist (subagent, always)
+│   ├─ PR open   → Ralph: review loop / Fallback: review-specialist
+│   └─ No PR     → Ralph: full cycle / Fallback: implement-specialist
 │
 └─ NO → START mode
-    ├─ Args given → Setup worktree, then invoke Ralph for full cycle
+    ├─ Args given → Setup worktree, then Ralph: full cycle / Fallback: start-specialist
     └─ No args    → Report ready tasks (no subagent needed)
 ```
 
@@ -55,11 +66,11 @@ Is current directory a TM worktree (or cd'd to one via conversation context)?
 gh pr view --json number,state,mergedAt 2>/dev/null
 ```
 
-| Condition | Action |
-|-----------|--------|
-| `mergedAt` is set | Launch `cleanup-specialist` (subagent) |
-| PR exists, open | Invoke Ralph for review loop |
-| No PR | Invoke Ralph for full cycle |
+| Condition | Action (Ralph) | Action (Fallback) |
+|-----------|----------------|-------------------|
+| `mergedAt` is set | cleanup-specialist | cleanup-specialist |
+| PR exists, open | Ralph review loop | review-specialist |
+| No PR | Ralph full cycle | implement-specialist |
 
 ---
 
@@ -84,7 +95,7 @@ Run `/tm <tag> <task-id>` to start a task.
 
 **Do NOT launch subagent.** User chooses, then re-runs `/tm` with args.
 
-### With Arguments → Setup then Ralph
+### With Arguments → Setup then Implement
 
 Extract tag and task-id from arguments.
 
@@ -100,58 +111,15 @@ cd ../worktree/<tag>/<task-id>--<slug>
 task-master tags use "<tag>" && task-master set-status --id="<task-id>" --status=in-progress
 ```
 
-**Step 2: Get task details for Ralph prompt**
+**Step 2: Get task details**
 
 ```bash
 task-master show <task-id> --json
 ```
 
-**Step 3: Invoke Ralph for full cycle (implement → PR → review)**
+**Step 3: Implement (Ralph or Fallback)**
 
-```
-Skill(
-  skill: "ralph-loop:ralph-loop",
-  args: """
-Complete <tag>.<task-id>: <task-title>
-
-Working directory: <worktree-path>
-
-## Requirements
-<task-description-and-subtasks>
-
-## Phase 1: Implementation (TDD)
-1. Run tests for affected code
-2. If tests fail, fix the code
-3. If coverage low, add tests
-4. Commit incrementally
-
-## Phase 2: Create PR (when local tests pass)
-1. Push branch: `git push -u origin <branch>`
-2. Create PR: `gh pr create --title '<title>' --body '<TM reference + summary>'`
-3. Note the PR number
-
-## Phase 3: Review Loop (after PR created)
-1. Wait 60s for CI to start
-2. Check CI: `gh pr checks <number>`
-3. Check feedback: `gh api repos/<owner>/<repo>/pulls/<number>/comments`
-4. If CI fails or feedback exists:
-   - Fix issues
-   - Commit and push
-   - Go to step 1
-5. If CI passes and no unaddressed feedback, done
-
-## Completion Criteria
-- PR created and pushed
-- CI passing
-- No unaddressed review feedback
-
-Output <promise>PR_READY</promise> when done.
---max-iterations 50 --completion-promise PR_READY
-"""
-)
-```
-
-After Ralph completes, report PR URL and status.
+See [Full Cycle: Ralph](#full-cycle-ralph) or [Full Cycle: Fallback](#full-cycle-fallback) below.
 
 ---
 
@@ -188,9 +156,9 @@ Report complete.
 
 ---
 
-### Mode: REVIEW → Invoke Ralph for review loop
+### Mode: REVIEW (PR open)
 
-PR exists and is open. Use Ralph to iterate on CI and feedback:
+**If `$RALPH_AVAILABLE`:** Invoke Ralph for review loop:
 
 ```
 Skill(
@@ -221,20 +189,30 @@ Output <promise>PR_READY</promise> when done.
 )
 ```
 
-After Ralph completes, report PR status.
+**If Ralph NOT available:** Launch review-specialist subagent:
+
+```
+Task(
+  subagent_type: "general-purpose",
+  model: "sonnet",
+  prompt: """
+# Review PR #<number> for <tag>.<task-id>
+
+Working directory: <worktree-path>
+
+Check CI and feedback. Fix issues, push, wait for CI, repeat until ready.
+Spawn opus for complex code changes.
+
+Report: ready, waiting, or blocked.
+"""
+)
+```
 
 ---
 
-### Mode: CREATE_PR or IMPLEMENT → Invoke Ralph for full cycle
+### Mode: IMPLEMENT or CREATE_PR (no PR exists)
 
-Whether commits exist (needs PR) or not (needs implementation), use Ralph for the full cycle.
-
-```bash
-# Get task details for the prompt
-task-master tags use "<tag>" && task-master show <task-id> --json
-```
-
-Then invoke Ralph (same prompt as START mode Step 3):
+**If `$RALPH_AVAILABLE`:** Invoke Ralph for full cycle:
 
 ```
 Skill(
@@ -253,7 +231,7 @@ Working directory: <worktree-path>
 3. If coverage low, add tests
 4. Commit incrementally
 
-## Phase 2: Create PR (when local tests pass) - skip if PR exists
+## Phase 2: Create PR (when local tests pass)
 1. Push branch: `git push -u origin <branch>`
 2. Create PR: `gh pr create --title '<title>' --body '<TM reference + summary>'`
 3. Note the PR number
@@ -279,18 +257,51 @@ Output <promise>PR_READY</promise> when done.
 )
 ```
 
-After Ralph completes, report PR URL and status.
+**If Ralph NOT available:** Launch implement-specialist subagent:
+
+```
+Task(
+  subagent_type: "general-purpose",
+  model: "sonnet",
+  prompt: """
+# Implement <tag>.<task-id>: <task-title>
+
+Working directory: <worktree-path>
+
+You're an orchestrator. Spawn opus for complex code changes.
+
+## Requirements
+<task-description-and-subtasks>
+
+## Flow
+1. Implement using TDD (run tests, fix failures, commit)
+2. Push and create PR
+3. Monitor CI, fix issues
+4. Report: PR ready, waiting, or blocked
+
+⚠️ Long test runs may burn context. Consider installing Ralph plugin: `/plugin install ralph-loop`
+"""
+)
+```
 
 ---
 
 ## Orchestrator Flow
 
 ```
-/tm → detect context → route:
-  ├─ No PR (implement/create) → invoke Ralph (full cycle)
-  ├─ PR open (review)         → invoke Ralph (review loop)
-  ├─ PR merged (cleanup)      → launch cleanup-specialist (subagent)
-  └─ No context               → list ready tasks
+/tm → check Ralph → detect context → route:
+  │
+  ├─ No PR (implement/create)
+  │   ├─ Ralph available → invoke Ralph (full cycle)
+  │   └─ Ralph missing   → launch implement-specialist (subagent)
+  │
+  ├─ PR open (review)
+  │   ├─ Ralph available → invoke Ralph (review loop)
+  │   └─ Ralph missing   → launch review-specialist (subagent)
+  │
+  ├─ PR merged (cleanup) → launch cleanup-specialist (always subagent)
+  │
+  └─ No context → list ready tasks
 ```
 
 ---
