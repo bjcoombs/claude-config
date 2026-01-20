@@ -154,6 +154,11 @@ Report complete.
 )
 ```
 
+After subagent completes, cd to repo root (worktree was deleted, cwd is invalid):
+```bash
+cd ~/dev/github.com/<org>/<repo>
+```
+
 ---
 
 ### Mode: REVIEW (PR open)
