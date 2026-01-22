@@ -170,7 +170,7 @@ cd ~/dev/github.com/<org>/<repo>
 ```
 Skill(
   skill: "ralph-loop:ralph-loop",
-  args: "Review PR #<number> in <worktree-path>. Check CI, inline comments, conversation. Fix issues, push, wait 60s, repeat. Output <promise>PR_READY</promise> when CI passes and no unaddressed feedback. --max-iterations 30 --completion-promise PR_READY"
+  args: "Review PR #<number> in <worktree-path>. Check CI, inline comments, conversation. Fix issues, push, wait 60s, repeat. Output \\<promise\\>PR_READY\\</promise\\> when CI passes and no unaddressed feedback. --max-iterations 30 --completion-promise PR_READY"
 )
 ```
 
@@ -204,7 +204,7 @@ Report: ready, waiting, or blocked.
 ```
 Skill(
   skill: "ralph-loop:ralph-loop",
-  args: "Complete <tag>.<task-id> in <worktree-path>. Run task-master show <task-id> for requirements. TDD: test, fix, commit. Then push, create PR, monitor CI, address feedback. Output <promise>PR_READY</promise> when CI passes and no unaddressed feedback. --max-iterations 50 --completion-promise PR_READY"
+  args: "Complete <tag>.<task-id> in <worktree-path>. Run task-master show <task-id> for requirements. TDD: test, fix, commit. Then push, create PR, monitor CI, address feedback. Output \\<promise\\>PR_READY\\</promise\\> when CI passes and no unaddressed feedback. --max-iterations 50 --completion-promise PR_READY"
 )
 ```
 

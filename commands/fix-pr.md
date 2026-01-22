@@ -17,7 +17,7 @@ ls ~/.claude/plugins/cache/claude-plugins-official/ralph-loop/*/commands/ralph-l
 ```
 Skill(
   skill: "ralph-loop:ralph-loop",
-  args: "Fix PR autonomously. Get PR number, check CI, check inline comments, check conversation. Fix issues, commit, push, wait 30s, repeat. Report each iteration. Output <promise>PR_READY</promise> when all checks pass and no unresolved comments. --max-iterations 10 --completion-promise PR_READY"
+  args: "Fix PR autonomously. Get PR number, check CI, check inline comments, check conversation. Fix issues, commit, push, wait 30s, repeat. Report each iteration. Output \\<promise\\>PR_READY\\</promise\\> when all checks pass and no unresolved comments. --max-iterations 10 --completion-promise PR_READY"
 )
 ```
 
