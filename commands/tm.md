@@ -136,6 +136,14 @@ TASK_ID="${TASK_DIR%%--*}"
 
 ### Mode: CLEANUP → Launch cleanup-specialist
 
+**CRITICAL: cd to repo root BEFORE launching cleanup-specialist.** The subagent will delete the current worktree directory, and if the parent's cwd is invalid when the subagent completes, stop hooks will fail with ENOENT.
+
+**Step 1: cd to repo root first**
+```bash
+cd ~/dev/github.com/<org>/<repo> && pwd
+```
+
+**Step 2: Then launch cleanup-specialist**
 ```
 Task(
   subagent_type: "general-purpose",
@@ -144,48 +152,71 @@ Task(
 # Cleanup <tag>.<task-id>
 
 PR merged. Clean up in this order:
-1. cd to <repo>-main FIRST (you're about to delete current directory)
-2. Mark task done: `task-master tags use "<tag>" && task-master set-status --id=<task-id> --status=done`
-3. Remove worktree: `git worktree remove ../worktree/<tag>/<task-id>--<slug>`
-4. Delete branch: `git branch -d <branch-name>`
+1. Mark task done: `task-master tags use "<tag>" && task-master set-status --id=<task-id> --status=done`
+2. Remove worktree from <repo>-main: `git worktree remove ../worktree/<tag>/<task-id>--<slug>`
+3. Delete branch: `git branch -d <branch-name>`
 
 Report complete.
 """
 )
-```
 
 ---
 
 ### Mode: REVIEW (PR open)
 
-**If `$RALPH_AVAILABLE`:** Invoke Ralph for review loop:
+#### Review Outcomes (Three States)
+
+When reviewing code, categorize findings into three distinct outcomes:
+
+| State | Icon | Meaning | GitHub Action |
+|-------|------|---------|---------------|
+| **Blockers** | 🔴 | Must address before merge - bugs, security issues, correctness problems | Request changes, post inline comments with "MUST FIX" |
+| **Suggestions** | 🟡 | Should address - style, performance, maintainability concerns | Comment (don't approve), post inline comments as suggestions |
+| **Approve** | 🟢 | Ready to merge, possibly with minor notes | Approve with optional comments |
+
+**Decision criteria:**
+- **Blocker**: Would this cause a bug, security issue, or break functionality?
+- **Suggestion**: Is this a style/performance improvement that doesn't affect correctness?
+- **Approve**: Does the code meet requirements and pass tests?
+
+#### Posting Inline Comments
+
+Use `gh api` to post inline review comments on specific lines:
+
+```bash
+# Post a single inline comment
+gh api repos/<owner>/<repo>/pulls/<pr-number>/comments \
+  --method POST \
+  -f body="🔴 **MUST FIX**: Description of the blocker issue" \
+  -f commit_id="$(gh pr view <pr-number> --json headRefOid -q '.headRefOid')" \
+  -f path="path/to/file.go" \
+  -f line=42
+
+# For multi-line comments (start_line to line)
+gh api repos/<owner>/<repo>/pulls/<pr-number>/comments \
+  --method POST \
+  -f body="🟡 **Suggestion**: Consider using X instead of Y for better performance" \
+  -f commit_id="$(gh pr view <pr-number> --json headRefOid -q '.headRefOid')" \
+  -f path="path/to/file.go" \
+  -f start_line=40 \
+  -f line=45
+```
+
+**Comment prefix conventions:**
+- `🔴 **MUST FIX**:` - Blocker that must be addressed
+- `🟡 **Suggestion**:` - Non-blocking improvement
+- `🟢 **Note**:` - Informational, no action needed
+
+#### Review Workflow
+
+**If `$RALPH_AVAILABLE`:** Invoke Ralph for review loop.
+
+**IMPORTANT**: Keep prompt SIMPLE - no multi-line args with special characters.
 
 ```
 Skill(
   skill: "ralph-loop:ralph-loop",
-  args: """
-Review PR #<number> for <tag>.<task-id>
-
-Working directory: <worktree-path>
-
-## Review Loop
-1. Check CI: `gh pr checks <number>`
-2. Check inline feedback: `gh api repos/<owner>/<repo>/pulls/<number>/comments`
-3. Check conversation: `gh pr view <number> --comments`
-4. If CI fails or unaddressed feedback:
-   - Fix issues (check TM before creating new tasks for suggestions)
-   - Commit and push
-   - Wait 60s for CI
-   - Go to step 1
-5. If CI passes and no unaddressed feedback, done
-
-## Completion Criteria
-- CI passing
-- No unaddressed review feedback
-
-Output <promise>PR_READY</promise> when done.
---max-iterations 30 --completion-promise PR_READY
-"""
+  args: "Review PR #<number> in <worktree-path>. Check CI, inline comments, conversation. Categorize issues as blockers (must fix) or suggestions (nice to have). Fix blockers first, then suggestions. Push, wait 60s, repeat. Output \\<promise\\>PR_READY\\</promise\\> when CI passes and all blockers addressed. --max-iterations 30 --completion-promise PR_READY"
 )
 ```
 
@@ -200,10 +231,29 @@ Task(
 
 Working directory: <worktree-path>
 
-Check CI and feedback. Fix issues, push, wait for CI, repeat until ready.
-Spawn opus for complex code changes.
+## Review Process
+1. Check CI status first
+2. Read inline comments (gh api repos/<owner>/<repo>/pulls/<number>/comments)
+3. Read conversation comments (gh pr view <number> --comments)
 
-Report: ready, waiting, or blocked.
+## Categorize Issues
+- 🔴 **Blockers**: Bugs, security issues, correctness - MUST fix
+- 🟡 **Suggestions**: Style, performance - SHOULD fix if quick
+- 🟢 **Approve-worthy**: Ready with optional notes
+
+## Actions
+- Fix all blockers
+- Fix suggestions if quick (<5 min each)
+- Defer suggestions needing design decisions to user
+- Post inline comments using gh api for new findings
+
+## Report Format
+Report one of:
+- **READY**: All blockers fixed, suggestions addressed or deferred
+- **WAITING**: CI running, will check again
+- **BLOCKED**: Need user decision on <specific issue>
+
+Spawn opus for complex code changes.
 """
 )
 ```
@@ -212,48 +262,14 @@ Report: ready, waiting, or blocked.
 
 ### Mode: IMPLEMENT or CREATE_PR (no PR exists)
 
-**If `$RALPH_AVAILABLE`:** Invoke Ralph for full cycle:
+**If `$RALPH_AVAILABLE`:** Invoke Ralph for full cycle.
+
+**IMPORTANT**: Keep the Ralph prompt SIMPLE to avoid bash parsing issues. Do NOT embed task descriptions inline - they contain backticks and special characters that break parsing.
 
 ```
 Skill(
   skill: "ralph-loop:ralph-loop",
-  args: """
-Complete <tag>.<task-id>: <task-title>
-
-Working directory: <worktree-path>
-
-## Requirements
-<task-description-and-subtasks>
-
-## Phase 1: Implementation (TDD) - skip if commits already exist
-1. Run tests for affected code
-2. If tests fail, fix the code
-3. If coverage low, add tests
-4. Commit incrementally
-
-## Phase 2: Create PR (when local tests pass)
-1. Push branch: `git push -u origin <branch>`
-2. Create PR: `gh pr create --title '<title>' --body '<TM reference + summary>'`
-3. Note the PR number
-
-## Phase 3: Review Loop (after PR created)
-1. Wait 60s for CI to start
-2. Check CI: `gh pr checks <number>`
-3. Check feedback: `gh api repos/<owner>/<repo>/pulls/<number>/comments`
-4. If CI fails or feedback exists:
-   - Fix issues
-   - Commit and push
-   - Go to step 1
-5. If CI passes and no unaddressed feedback, done
-
-## Completion Criteria
-- PR created and pushed
-- CI passing
-- No unaddressed review feedback
-
-Output <promise>PR_READY</promise> when done.
---max-iterations 50 --completion-promise PR_READY
-"""
+  args: "Complete <tag>.<task-id> in <worktree-path>. Run task-master show <task-id> for requirements. TDD: test, fix, commit. Then push, create PR, monitor CI, address feedback. Output \\<promise\\>PR_READY\\</promise\\> when CI passes and no unaddressed feedback. --max-iterations 50 --completion-promise PR_READY"
 )
 ```
 

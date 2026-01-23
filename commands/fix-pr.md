@@ -10,31 +10,14 @@ Enter autonomous PR fixing loop for the current branch's PR until all checks pas
 ls ~/.claude/plugins/cache/claude-plugins-official/ralph-loop/*/commands/ralph-loop.md 2>/dev/null && echo "RALPH_AVAILABLE" || echo "RALPH_NOT_AVAILABLE"
 ```
 
-**If Ralph available:** Use Ralph for iteration (preserves context between iterations):
+**If Ralph available:** Use Ralph for iteration (preserves context between iterations).
+
+**IMPORTANT**: Keep prompt SIMPLE - no multi-line args with special characters.
 
 ```
 Skill(
   skill: "ralph-loop:ralph-loop",
-  args: """
-Fix PR autonomously until all checks pass.
-
-## Each Iteration
-1. Get PR: `gh pr view --json number,title,headRefName`
-2. Check CI: `gh pr checks <number>`
-3. Check inline comments: `gh api repos/{owner}/{repo}/pulls/<number>/comments`
-4. Check conversation: `gh pr view <number> --comments`
-5. If failures or unresolved bot comments:
-   - Analyze and fix
-   - Commit and push
-   - Wait 30s for CI
-   - Continue loop
-6. If all passing and no bot comments, done
-
-Report each iteration: 🔄 Iteration N: Fixed X issues
-
-Output <promise>PR_READY</promise> when all checks pass and no unresolved comments.
---max-iterations 10 --completion-promise PR_READY
-"""
+  args: "Fix PR autonomously. Get PR number, check CI, check inline comments, check conversation. Fix issues, commit, push, wait 30s, repeat. Report each iteration. Output \\<promise\\>PR_READY\\</promise\\> when all checks pass and no unresolved comments. --max-iterations 10 --completion-promise PR_READY"
 )
 ```
 
