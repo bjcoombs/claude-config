@@ -179,6 +179,11 @@ When reviewing code, categorize findings into three distinct outcomes:
 - **Suggestion**: Is this a style/performance improvement that doesn't affect correctness?
 - **Approve**: Does the code meet requirements and pass tests?
 
+**Bias toward action**: "Non-blocking" suggestions should still be fixed if quick. Only defer to user if:
+- Suggestion requires design decision
+- Fix is controversial or risky
+- Suggestion is genuinely wrong (explain why)
+
 #### Posting Inline Comments
 
 Use `gh api` to post inline review comments on specific lines:
@@ -216,7 +221,7 @@ gh api repos/<owner>/<repo>/pulls/<pr-number>/comments \
 ```
 Skill(
   skill: "ralph-loop:ralph-loop",
-  args: "Review PR #<number> in <worktree-path>. Check CI, inline comments, conversation. Categorize issues as blockers (must fix) or suggestions (nice to have). Fix blockers first, then suggestions. Push, wait 60s, repeat. Output \\<promise\\>PR_READY\\</promise\\> when CI passes and all blockers addressed. --max-iterations 30 --completion-promise PR_READY"
+  args: "Review PR #<number> in <worktree-path>. Check CI, inline comments, conversation. Categorize as blockers (must fix) or suggestions (fix if quick). Fix all blockers, then suggestions. Push, wait 60s, repeat. Output \\<promise\\>PR_READY\\</promise\\> when CI passes and all actionable feedback addressed. --max-iterations 10 --completion-promise PR_READY"
 )
 ```
 
@@ -241,9 +246,12 @@ Working directory: <worktree-path>
 - 🟡 **Suggestions**: Style, performance - SHOULD fix if quick
 - 🟢 **Approve-worthy**: Ready with optional notes
 
+## Bias Toward Action
+Fix ALL suggestions, even "non-blocking" ones, unless they require design decisions. "Non-blocking" means "safe to fix" not "safe to ignore."
+
 ## Actions
-- Fix all blockers
-- Fix suggestions if quick (<5 min each)
+- Fix all blockers first
+- Fix suggestions if quick
 - Defer suggestions needing design decisions to user
 - Post inline comments using gh api for new findings
 
@@ -269,7 +277,7 @@ Spawn opus for complex code changes.
 ```
 Skill(
   skill: "ralph-loop:ralph-loop",
-  args: "Complete <tag>.<task-id> in <worktree-path>. Run task-master show <task-id> for requirements. TDD: test, fix, commit. Then push, create PR, monitor CI, address feedback. Output \\<promise\\>PR_READY\\</promise\\> when CI passes and no unaddressed feedback. --max-iterations 50 --completion-promise PR_READY"
+  args: "Complete <tag>.<task-id> in <worktree-path>. Run task-master show <task-id> for requirements. TDD: test, fix, commit. Then push, create PR, monitor CI, address feedback. Output \\<promise\\>PR_READY\\</promise\\> when CI passes and no unaddressed feedback. --max-iterations 20 --completion-promise PR_READY"
 )
 ```
 
