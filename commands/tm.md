@@ -33,10 +33,13 @@ Set `$RALPH_AVAILABLE` based on result. If Ralph not available, warn once:
 
 ```bash
 pwd
-git branch --show-current 2>/dev/null || echo "NOT_GIT"
+# Check if pwd contains worktree pattern (git command may fail in repo root)
+pwd | grep -q '/worktree/[^/]*/[^/]*--' && echo "IN_WORKTREE" || echo "NOT_IN_WORKTREE"
 ```
 
-**If conversation shows active work but pwd is NOT that worktree:**
+**If IN_WORKTREE**: Extract tag and task-id from path, proceed with PR check.
+
+**If NOT_IN_WORKTREE but conversation shows active work:**
 ```bash
 cd ~/dev/github.com/<org>/<repo>/worktree/<tag>/<task-id>--<slug>
 ```
@@ -104,11 +107,15 @@ Extract tag and task-id from arguments.
 ```bash
 cd ~/dev/github.com/<org>/<repo>/<repo>-main
 git checkout develop && git pull origin develop
-git branch <tag>/<task-id>--<slug>
+# Use -- separator (not /) to avoid git ref conflicts when tag branch exists
+git branch <tag>--<task-id>--<slug>
 mkdir -p ../worktree/<tag>
-git worktree add ../worktree/<tag>/<task-id>--<slug> <tag>/<task-id>--<slug>
-cd ../worktree/<tag>/<task-id>--<slug>
+git worktree add ../worktree/<tag>/<task-id>--<slug> <tag>--<task-id>--<slug>
+# Run task-master from repo root (where .taskmaster/ lives), not worktree
+cd ~/dev/github.com/<org>/<repo>
 task-master tags use "<tag>" && task-master set-status --id="<task-id>" --status=in-progress
+# Then cd to worktree for implementation
+cd ~/dev/github.com/<org>/<repo>/worktree/<tag>/<task-id>--<slug>
 ```
 
 **Step 2: Get task details**
@@ -136,6 +143,14 @@ TASK_ID="${TASK_DIR%%--*}"
 
 ### Mode: CLEANUP → Launch cleanup-specialist
 
+**CRITICAL: cd to repo root BEFORE launching subagent.** The subagent will delete the worktree, and if parent's cwd is invalid when it completes, stop hooks fail.
+
+**Step 1: cd to repo root first**
+```bash
+cd ~/dev/github.com/<org>/<repo> && pwd
+```
+
+**Step 2: Launch cleanup-specialist**
 ```
 Task(
   subagent_type: "general-purpose",
@@ -144,20 +159,13 @@ Task(
 # Cleanup <tag>.<task-id>
 
 PR merged. Clean up in this order:
-1. cd to <repo>-main FIRST (you're about to delete current directory)
-2. Mark task done: `task-master tags use "<tag>" && task-master set-status --id=<task-id> --status=done`
-3. Remove worktree: `git worktree remove ../worktree/<tag>/<task-id>--<slug>`
-4. Delete branch: `git branch -d <branch-name>`
+1. Mark task done: `cd ~/dev/github.com/<org>/<repo> && task-master tags use "<tag>" && task-master set-status --id=<task-id> --status=done`
+2. Remove worktree from <repo>-main: `cd <repo>-main && git worktree remove ../worktree/<tag>/<task-id>--<slug>`
+3. Delete branch: `git branch -d <tag>--<task-id>--<slug>`
 
 Report complete.
 """
 )
-```
-
-After subagent completes, cd to repo root (worktree was deleted, cwd is invalid):
-```bash
-cd ~/dev/github.com/<org>/<repo>
-```
 
 ---
 
@@ -165,14 +173,16 @@ cd ~/dev/github.com/<org>/<repo>
 
 **If `$RALPH_AVAILABLE`:** Invoke Ralph for review loop.
 
-**IMPORTANT**: Keep prompt SIMPLE - no multi-line args with special characters.
+**IMPORTANT**: Keep prompt SIMPLE. No angle brackets or special chars in the args string.
 
 ```
 Skill(
   skill: "ralph-loop:ralph-loop",
-  args: "Review PR #<number> in <worktree-path>. Check CI, inline comments, conversation. Fix issues, push, wait 60s, repeat. Output \\<promise\\>PR_READY\\</promise\\> when CI passes and no unaddressed feedback. --max-iterations 30 --completion-promise PR_READY"
+  args: "Review PR #<number> in <worktree-path>. Check CI, inline comments, conversation. Fix issues, push, wait 60s, repeat. When CI passes and no feedback remains, output the completion promise. --max-iterations 10 --completion-promise PR_READY"
 )
 ```
+
+**Note**: Output `<promise>PR_READY</promise>` when genuinely complete.
 
 **If Ralph NOT available:** Launch review-specialist subagent:
 
@@ -199,14 +209,16 @@ Report: ready, waiting, or blocked.
 
 **If `$RALPH_AVAILABLE`:** Invoke Ralph for full cycle.
 
-**IMPORTANT**: Keep the Ralph prompt SIMPLE to avoid bash parsing issues. Do NOT embed task descriptions inline - they contain backticks and special characters that break parsing.
+**IMPORTANT**: Keep the Ralph prompt SIMPLE. No angle brackets or special chars in the args string.
 
 ```
 Skill(
   skill: "ralph-loop:ralph-loop",
-  args: "Complete <tag>.<task-id> in <worktree-path>. Run task-master show <task-id> for requirements. TDD: test, fix, commit. Then push, create PR, monitor CI, address feedback. Output \\<promise\\>PR_READY\\</promise\\> when CI passes and no unaddressed feedback. --max-iterations 50 --completion-promise PR_READY"
+  args: "Complete <tag>.<task-id> in <worktree-path>. Run task-master show <task-id> for requirements. TDD: test, fix, commit. Push, create PR, monitor CI, address feedback. When CI passes and no feedback remains, output the completion promise. --max-iterations 20 --completion-promise PR_READY"
 )
 ```
+
+**Note**: Output `<promise>PR_READY</promise>` when genuinely complete. The promise tags don't need to be in the args.
 
 **If Ralph NOT available:** Launch implement-specialist subagent:
 
