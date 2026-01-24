@@ -171,6 +171,32 @@ Report complete.
 
 ### Mode: REVIEW (PR open)
 
+#### Ready Criteria (MUST check before declaring "ready for human review")
+
+```bash
+# 1. CI must be passing
+gh pr checks <number> --json state --jq '.[] | select(.state != "SUCCESS" and .state != "SKIPPED")' | head -1
+
+# 2. Check Claude[bot] review state (if any)
+CLAUDE_REVIEW=$(gh api repos/<owner>/<repo>/pulls/<number>/reviews \
+  --jq '[.[] | select(.user.login == "claude[bot]")] | last')
+CLAUDE_STATE=$(echo "$CLAUDE_REVIEW" | jq -r '.state // "NONE"')
+
+# 3. If COMMENTED/CHANGES_REQUESTED, check for inline comments
+INLINE_COMMENTS=$(gh api repos/<owner>/<repo>/pulls/<number>/comments \
+  --jq '[.[] | select(.user.login == "claude[bot]")] | length')
+```
+
+**Decision tree:**
+- CI failing → NOT ready (fix CI first)
+- Claude[bot] state = `APPROVED` → Ready
+- Claude[bot] state = `NONE` (no review) → Ready
+- Claude[bot] state = `COMMENTED`/`CHANGES_REQUESTED`:
+  - Inline comments > 0 → NOT ready (address feedback)
+  - Inline comments = 0 → Ready (escape hatch - just summary, no actionable items)
+
+#### Review Loop
+
 **If `$RALPH_AVAILABLE`:** Invoke Ralph for review loop.
 
 **IMPORTANT**: Keep prompt SIMPLE. No angle brackets or special chars in the args string.
@@ -178,11 +204,11 @@ Report complete.
 ```
 Skill(
   skill: "ralph-loop:ralph-loop",
-  args: "Review PR #<number> in <worktree-path>. Check CI, inline comments, conversation. Fix issues, push, wait 60s, repeat. When CI passes and no feedback remains, output the completion promise. --max-iterations 10 --completion-promise PR_READY"
+  args: "Review PR #<number> in <worktree-path>. Check CI and Claude[bot] review. Fix issues, push, wait 60s, repeat. Only complete when CI passes AND Claude[bot] approved (or no inline comments). --max-iterations 10 --completion-promise PR_READY"
 )
 ```
 
-**Note**: Output `<promise>PR_READY</promise>` when genuinely complete.
+**Note**: Output `<promise>PR_READY</promise>` when genuinely complete per Ready Criteria above.
 
 **If Ralph NOT available:** Launch review-specialist subagent:
 
@@ -195,7 +221,8 @@ Task(
 
 Working directory: <worktree-path>
 
-Check CI and feedback. Fix issues, push, wait for CI, repeat until ready.
+Check CI and Claude[bot] review state. Fix issues, push, wait for CI, repeat.
+Only declare ready when CI passes AND Claude[bot] has approved (or left no inline comments).
 Spawn opus for complex code changes.
 
 Report: ready, waiting, or blocked.
