@@ -177,23 +177,17 @@ Report complete.
 # 1. CI must be passing
 gh pr checks <number> --json state --jq '.[] | select(.state != "SUCCESS" and .state != "SKIPPED")' | head -1
 
-# 2. Check Claude[bot] review state (if any)
-CLAUDE_REVIEW=$(gh api repos/<owner>/<repo>/pulls/<number>/reviews \
-  --jq '[.[] | select(.user.login == "claude[bot]")] | last')
-CLAUDE_STATE=$(echo "$CLAUDE_REVIEW" | jq -r '.state // "NONE"')
-
-# 3. If COMMENTED/CHANGES_REQUESTED, check for inline comments
-INLINE_COMMENTS=$(gh api repos/<owner>/<repo>/pulls/<number>/comments \
-  --jq '[.[] | select(.user.login == "claude[bot]")] | length')
+# 2. Check for ANY unresolved bot inline comments (Claude or CodeRabbit)
+BOT_INLINE_COMMENTS=$(gh api repos/<owner>/<repo>/pulls/<number>/comments \
+  --jq '[.[] | select(.user.login == "claude[bot]" or .user.login == "coderabbitai[bot]")] | length')
 ```
 
 **Decision tree:**
 - CI failing → NOT ready (fix CI first)
-- Claude[bot] state = `APPROVED` → Ready
-- Claude[bot] state = `NONE` (no review) → Ready
-- Claude[bot] state = `COMMENTED`/`CHANGES_REQUESTED`:
-  - Inline comments > 0 → NOT ready (address feedback)
-  - Inline comments = 0 → Ready (escape hatch - just summary, no actionable items)
+- Bot inline comments > 0 → NOT ready (address feedback from Claude/CodeRabbit)
+- CI passing AND no bot inline comments → Ready for human review
+
+**Note**: Bot reviewers (claude[bot], coderabbitai[bot]) leave inline comments for issues. Address ALL inline comments before declaring ready. Conversation comments (PR description thread) don't block - only inline code comments.
 
 #### Review Loop
 
