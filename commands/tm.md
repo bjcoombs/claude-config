@@ -176,9 +176,13 @@ Report complete.
 **"Green" means ALL of these are true:**
 1. **Branch in sync** - No merge conflicts with develop
 2. **CI passing** - All checks succeed (or skipped)
-3. **No unresolved inline comments** - From bots (Claude, CodeRabbit) or human reviewers
+3. **All inline comments addressed** - Code fixed or replied to (see resolution rules below)
 4. **No unaddressed conversation comments** - Actionable feedback responded to
 5. **Your review threads resolved** - Threads YOU created are marked resolved
+
+**Inline comment resolution rules:**
+- **Bot threads** (claude[bot], coderabbitai[bot]): Fix the code, then **resolve the thread** yourself
+- **Human threads**: Fix the code, then **reply inline** explaining the fix and `@mention` the reviewer to resolve. Do NOT resolve human threads — let the reviewer confirm
 
 #### Sync with develop (EVERY iteration, do this FIRST)
 
@@ -195,24 +199,37 @@ git fetch origin develop && git merge origin/develop --no-edit
 # 2. CI must be passing
 gh pr checks <number> --json state --jq '.[] | select(.state != "SUCCESS" and .state != "SKIPPED")' | head -1
 
-# 3. Check for ANY bot inline comments (these need addressing)
-BOT_INLINE_COMMENTS=$(gh api repos/<owner>/<repo>/pulls/<number>/comments \
-  --jq '[.[] | select(.user.login == "claude[bot]" or .user.login == "coderabbitai[bot]")] | length')
+# 3. Check unresolved inline comments (split by author type)
+# 3a. Bot threads → fix code, then resolve the thread
+gh api graphql -f query='query { repository(owner: "<owner>", name: "<repo>") {
+  pullRequest(number: <number>) { reviewThreads(first: 50) { nodes {
+    id isResolved comments(first: 1) { nodes { author { login } body } }
+  }}}}}' --jq '.data.repository.pullRequest.reviewThreads.nodes[]
+  | select(.isResolved == false)
+  | select(.comments.nodes[0].author.login == "claude[bot]" or .comments.nodes[0].author.login == "coderabbitai[bot]")
+  | {id, author: .comments.nodes[0].author.login, body: .comments.nodes[0].body[0:100]}'
 
-# 4. Check conversation for unaddressed comments (review manually)
+# 3b. Human threads → fix code, reply inline, @mention reviewer (do NOT resolve)
+gh api graphql -f query='...' --jq '.data.repository.pullRequest.reviewThreads.nodes[]
+  | select(.isResolved == false)
+  | select(.comments.nodes[0].author.login != "claude[bot]" and .comments.nodes[0].author.login != "coderabbitai[bot]")
+  | {id, author: .comments.nodes[0].author.login, body: .comments.nodes[0].body[0:100]}'
+
+# 4. Check conversation for unaddressed comments
 gh pr view <number> --comments
 
 # 5. Check YOUR unresolved review threads
-gh api graphql -f query='query { repository(owner: "<owner>", name: "<repo>") {
-  pullRequest(number: <number>) { reviewThreads(first: 50) { nodes {
-    id isResolved comments(first: 1) { nodes { author { login } } }
-  }}}}}' --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false) | select(.comments.nodes[0].author.login == "claude[bot]")'
+gh api graphql -f query='...' --jq '.data.repository.pullRequest.reviewThreads.nodes[]
+  | select(.isResolved == false)
+  | select(.comments.nodes[0].author.login == "claude[bot]")
+  | {id}'
 ```
 
 **Decision tree:**
 - Merge conflicts → Resolve or report blocked
 - CI failing → Fix CI first
-- Bot inline comments exist → Address the feedback
+- Bot inline comments → Fix code, resolve their threads
+- Human inline comments → Fix code, reply with explanation, @mention reviewer
 - Actionable conversation comments → Respond or fix
 - Your threads unresolved → Resolve them
 - ALL clear → Output `<promise>PR_READY</promise>`
