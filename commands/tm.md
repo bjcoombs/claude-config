@@ -171,38 +171,66 @@ Report complete.
 
 ### Mode: REVIEW (PR open)
 
-#### Ready Criteria (MUST check before declaring "ready for human review")
+#### Ready Criteria (ALL must be true before PR_READY)
+
+**"Green" means ALL of these are true:**
+1. **Branch in sync** - No merge conflicts with develop
+2. **CI passing** - All checks succeed (or skipped)
+3. **No unresolved inline comments** - From bots (Claude, CodeRabbit) or human reviewers
+4. **No unaddressed conversation comments** - Actionable feedback responded to
+5. **Your review threads resolved** - Threads YOU created are marked resolved
+
+#### Sync with develop (EVERY iteration, do this FIRST)
 
 ```bash
-# 1. CI must be passing
+# Merge develop to prevent drift and catch conflicts early
+git fetch origin develop && git merge origin/develop --no-edit
+# If conflicts: resolve them, commit, push
+# If can't auto-resolve: report blocked
+```
+
+#### Check remaining criteria
+
+```bash
+# 2. CI must be passing
 gh pr checks <number> --json state --jq '.[] | select(.state != "SUCCESS" and .state != "SKIPPED")' | head -1
 
-# 2. Check for ANY unresolved bot inline comments (Claude or CodeRabbit)
+# 3. Check for ANY bot inline comments (these need addressing)
 BOT_INLINE_COMMENTS=$(gh api repos/<owner>/<repo>/pulls/<number>/comments \
   --jq '[.[] | select(.user.login == "claude[bot]" or .user.login == "coderabbitai[bot]")] | length')
+
+# 4. Check conversation for unaddressed comments (review manually)
+gh pr view <number> --comments
+
+# 5. Check YOUR unresolved review threads
+gh api graphql -f query='query { repository(owner: "<owner>", name: "<repo>") {
+  pullRequest(number: <number>) { reviewThreads(first: 50) { nodes {
+    id isResolved comments(first: 1) { nodes { author { login } } }
+  }}}}}' --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false) | select(.comments.nodes[0].author.login == "claude[bot]")'
 ```
 
 **Decision tree:**
-- CI failing → NOT ready (fix CI first)
-- Bot inline comments > 0 → NOT ready (address feedback from Claude/CodeRabbit)
-- CI passing AND no bot inline comments → Ready for human review
-
-**Note**: Bot reviewers (claude[bot], coderabbitai[bot]) leave inline comments for issues. Address ALL inline comments before declaring ready. Conversation comments (PR description thread) don't block - only inline code comments.
+- Merge conflicts → Resolve or report blocked
+- CI failing → Fix CI first
+- Bot inline comments exist → Address the feedback
+- Actionable conversation comments → Respond or fix
+- Your threads unresolved → Resolve them
+- ALL clear → Output `<promise>PR_READY</promise>`
 
 #### Review Loop
 
 **If `$RALPH_AVAILABLE`:** Invoke Ralph for review loop.
 
-**IMPORTANT**: Keep prompt SIMPLE. No angle brackets or special chars in the args string.
+**CRITICAL**: The Ralph args are passed to bash UNQUOTED. Shell special chars like `(`, `)`, `&`, `;` will cause parse errors. NEVER include task titles or descriptions in the args - reference tasks by ID only.
 
 ```
 Skill(
   skill: "ralph-loop:ralph-loop",
-  args: "Review PR #<number> in <worktree-path>. Check CI and Claude[bot] review. Fix issues, push, wait 60s, repeat. Only complete when CI passes AND Claude[bot] approved (or no inline comments). --max-iterations 10 --completion-promise PR_READY"
+  args: "Review PR #<number> in <worktree-path>. FIRST: git fetch origin develop and merge to stay in sync. Then loop until ALL green: 1) No merge conflicts with develop, 2) CI passing, 3) No unresolved inline comments, 4) Conversation addressed, 5) Your threads resolved. Fix issues, push, wait 60s, check again. --max-iterations 10 --completion-promise PR_READY --tag <tag> --task <task-id>"
 )
 ```
 
-**Note**: Output `<promise>PR_READY</promise>` when genuinely complete per Ready Criteria above.
+**Note**: Output `<promise>PR_READY</promise>` ONLY when ALL five criteria are met.
 
 **If Ralph NOT available:** Launch review-specialist subagent:
 
@@ -215,11 +243,18 @@ Task(
 
 Working directory: <worktree-path>
 
-Check CI and Claude[bot] review state. Fix issues, push, wait for CI, repeat.
-Only declare ready when CI passes AND Claude[bot] has approved (or left no inline comments).
-Spawn opus for complex code changes.
+Each iteration: merge origin/develop first to stay in sync.
 
-Report: ready, waiting, or blocked.
+Loop until ALL green:
+1. No merge conflicts with develop
+2. CI checks passing
+3. No unresolved inline comments from bots or reviewers
+4. No unaddressed conversation comments
+5. All YOUR review threads resolved
+
+Fix issues, push, wait for CI, repeat. Spawn opus for complex code changes.
+
+Report: ready (all 5 criteria met), waiting (CI running), or blocked (need human input).
 """
 )
 ```
@@ -230,16 +265,16 @@ Report: ready, waiting, or blocked.
 
 **If `$RALPH_AVAILABLE`:** Invoke Ralph for full cycle.
 
-**IMPORTANT**: Keep the Ralph prompt SIMPLE. No angle brackets or special chars in the args string.
+**CRITICAL**: The Ralph args are passed to bash UNQUOTED. Shell special chars like `(`, `)`, `&`, `;` will cause parse errors. NEVER include task titles or descriptions in the args - reference tasks by ID only.
 
 ```
 Skill(
   skill: "ralph-loop:ralph-loop",
-  args: "Complete <tag>.<task-id> in <worktree-path>. Run task-master show <task-id> for requirements. TDD: test, fix, commit. Push, create PR, monitor CI, address feedback. When CI passes and no feedback remains, output the completion promise. --max-iterations 20 --completion-promise PR_READY"
+  args: "Complete <tag>.<task-id> in <worktree-path>. Run task-master show <task-id> for requirements. TDD: test, fix, commit. Push, create PR, then loop until ALL green. Each iteration: merge origin/develop first, then check 1) No conflicts, 2) CI passing, 3) No unresolved inline comments, 4) Conversation addressed, 5) Your threads resolved. --max-iterations 20 --completion-promise PR_READY --tag <tag> --task <task-id>"
 )
 ```
 
-**Note**: Output `<promise>PR_READY</promise>` when genuinely complete. The promise tags don't need to be in the args.
+**Note**: Output `<promise>PR_READY</promise>` ONLY when ALL five criteria are met.
 
 **If Ralph NOT available:** Launch implement-specialist subagent:
 
