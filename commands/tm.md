@@ -226,12 +226,12 @@ gh pr view <number> --comments
 
 **If `$RALPH_AVAILABLE`:** Invoke Ralph for review loop.
 
-**CRITICAL**: The Ralph args are passed to bash UNQUOTED. Shell special chars like `(`, `)`, `&`, `;` will cause parse errors. NEVER include task titles or descriptions in the args - reference tasks by ID only.
+**CRITICAL**: The Ralph args are passed to bash UNQUOTED. Shell special chars like `(`, `)`, `&`, `;`, `#` will cause parse errors or silent truncation. NEVER include task titles or descriptions in the args - reference tasks by ID only.
 
 ```
 Skill(
   skill: "ralph-loop:ralph-loop",
-  args: "Review PR #<number> in <worktree-path>. FIRST: git fetch origin develop and merge to stay in sync. Then loop until ALL green: 1) No merge conflicts with develop, 2) CI passing, 3) No unresolved inline comments, 4) Conversation addressed, 5) Your threads resolved. Fix issues, push, wait 60s, check again. --max-iterations 10 --completion-promise PR_READY --tag <tag> --task <task-id>"
+  args: "Review PR <number> for <tag>.<task-id> in <worktree-path>. FIRST merge origin/develop to stay in sync. Then loop until ALL green -- no merge conflicts, CI passing, no unresolved inline comments, conversation addressed, your review threads resolved. Fix issues, push, wait 60s, check again. --max-iterations 10 --completion-promise PR_READY --tag <tag> --task <task-id>"
 )
 ```
 
@@ -270,12 +270,12 @@ Report: ready (all 5 criteria met), waiting (CI running), or blocked (need human
 
 **If `$RALPH_AVAILABLE`:** Invoke Ralph for full cycle.
 
-**CRITICAL**: The Ralph args are passed to bash UNQUOTED. Shell special chars like `(`, `)`, `&`, `;` will cause parse errors. NEVER include task titles or descriptions in the args - reference tasks by ID only.
+**CRITICAL**: The Ralph args are passed to bash UNQUOTED. Shell special chars like `(`, `)`, `&`, `;`, `#` will cause parse errors or silent truncation. NEVER include task titles or descriptions in the args - reference tasks by ID only.
 
 ```
 Skill(
   skill: "ralph-loop:ralph-loop",
-  args: "Complete <tag>.<task-id> in <worktree-path>. Run task-master show <task-id> for requirements. TDD: test, fix, commit. Push, create PR, then loop until ALL green. Each iteration: merge origin/develop first, then check 1) No conflicts, 2) CI passing, 3) No unresolved inline comments, 4) Conversation addressed, 5) Your threads resolved. --max-iterations 20 --completion-promise PR_READY --tag <tag> --task <task-id>"
+  args: "Complete <tag>.<task-id> in <worktree-path>. Run task-master show <task-id> for requirements. TDD -- test, fix, commit. Push, create PR, then loop until ALL green. Each iteration merge origin/develop first, then check -- no merge conflicts, CI passing, no unresolved inline comments, conversation addressed, your review threads resolved. --max-iterations 20 --completion-promise PR_READY --tag <tag> --task <task-id>"
 )
 ```
 
