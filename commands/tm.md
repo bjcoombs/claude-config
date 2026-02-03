@@ -1,6 +1,6 @@
 ---
 description: Task Master - unified command for start, review, and close
-argument-hint: [tag task-id] (optional - derives context from worktree if omitted)
+argument-hint: [tag task-id] [--marathon] (optional - derives context from worktree if omitted)
 ---
 
 # Task Master Orchestrator
@@ -8,6 +8,10 @@ argument-hint: [tag task-id] (optional - derives context from worktree if omitte
 **$ARGUMENTS**
 
 > Thin orchestrator. Uses Ralph Loop for iteration when available, falls back to subagents.
+>
+> **Marathon Mode (`--marathon`)**: Automatically progress through all ready tasks in a tag.
+> After each PR merge, cleanup and start next ready task(s), parallelizing independent tasks.
+> YOU review and merge PRs at your own pace - marathon mode handles the mechanical workflow.
 
 ---
 
@@ -22,9 +26,16 @@ Set `$RALPH_AVAILABLE` based on result. If Ralph not available, warn once:
 
 ---
 
-## Phase 1: Detect Context
+## Phase 1: Detect Context and Mode
 
-**Check in order:**
+**Parse marathon flag:**
+```bash
+echo "$ARGUMENTS" | grep -q -- "--marathon" && echo "MARATHON_MODE" || echo "SINGLE_TASK_MODE"
+```
+
+Set `$MARATHON_MODE` to `true` or `false`.
+
+**Check context in order:**
 1. Current directory - pwd matches TM worktree pattern?
 2. Conversation context - Recent "📍 Current Work" footer with worktree path?
 3. Arguments - Explicit tag/task-id provided?
@@ -166,6 +177,33 @@ PR merged. Clean up in this order:
 Report complete.
 """
 )
+```
+
+**Step 3: Post-Cleanup - Check Next Ready (Marathon Mode)**
+
+If `$MARATHON_MODE` is `true`, check for next ready tasks and continue:
+
+```bash
+# Get next ready tasks in the tag
+task-master tags use "<tag>" && task-master list --ready --json
+```
+
+**Decision tree:**
+- **No ready tasks** → Report tag complete, terminate
+- **1 ready task** → Start that task (loop back to START mode setup)
+- **Multiple ready tasks** → Check dependencies:
+  - If independent (no shared dependencies) → Spawn parallel agents for each
+  - If sequential → Start first task only
+
+**For parallel execution:**
+```
+# Spawn multiple agents in parallel (using multiple Task calls in single message)
+Task(subagent_type: "general-purpose", ...) # Task A
+Task(subagent_type: "general-purpose", ...) # Task B
+Task(subagent_type: "general-purpose", ...) # Task C
+```
+
+Each parallel agent runs the full `/tm <tag> <task-id>` workflow independently.
 
 ---
 
@@ -313,7 +351,7 @@ You're an orchestrator. Spawn opus for complex code changes.
 ## Orchestrator Flow
 
 ```
-/tm → check Ralph → detect context → route:
+/tm [--marathon] → check Ralph → detect context → route:
   │
   ├─ No PR (implement/create)
   │   ├─ Ralph available → invoke Ralph (full cycle)
@@ -324,9 +362,21 @@ You're an orchestrator. Spawn opus for complex code changes.
   │   └─ Ralph missing   → launch review-specialist (subagent)
   │
   ├─ PR merged (cleanup) → launch cleanup-specialist (always subagent)
+  │   │
+  │   └─ Marathon mode? Check next ready tasks:
+  │       ├─ No ready → Report tag complete, STOP
+  │       ├─ 1 ready → Start task, LOOP to top
+  │       └─ N ready independent → Spawn N parallel agents, LOOP
   │
   └─ No context → list ready tasks
 ```
+
+**Marathon Mode Behavior:**
+- Human merges PRs at their own pace (never auto-merge)
+- After merge detected → cleanup → check next ready → auto-start
+- Independent tasks spawn in parallel (multiple concurrent PRs)
+- Loop continues until all tasks in tag are done
+- Can run for hours/days/weeks - you control progress via PR merges
 
 ---
 
@@ -357,6 +407,11 @@ Human merges PR     → (no command runs)
 
 ## Notes
 
-- Human merges PRs, never auto-merge
+- Human merges PRs, never auto-merge (even in marathon mode)
 - Subagents can bail if work is too large
-- Each `/tm` invocation starts fresh
+- Each `/tm` invocation starts fresh (unless using `--marathon`)
+- **Marathon mode**: Runs continuously until all tasks in tag are done
+  - Example: `/tm 19 --marathon` works through all 5 subtasks
+  - Example: `/tm saga-script-versioning --marathon` works through entire tag
+  - You merge PRs when ready → system auto-continues
+  - Parallelizes independent tasks automatically
