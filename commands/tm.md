@@ -10,7 +10,8 @@ argument-hint: [tag task-id] [--marathon] (optional - derives context from workt
 > Thin orchestrator. Uses Ralph Loop for iteration when available, falls back to subagents.
 >
 > **Marathon Mode (`--marathon`)**: Automatically progress through all ready tasks in a tag.
-> After each PR merge, cleanup and start next ready task(s), parallelizing independent tasks.
+> When Agent Teams are available, each task gets its own teammate (iTerm2 pane) with shared task list.
+> When teams unavailable, falls back to parallel subagents.
 > YOU review and merge PRs at your own pace - marathon mode handles the mechanical workflow.
 
 ---
@@ -24,6 +25,14 @@ ls ~/.claude/plugins/cache/claude-plugins-official/ralph-loop/*/commands/ralph-l
 Set `$RALPH_AVAILABLE` based on result. If Ralph not available, warn once:
 > ⚠️ Ralph Loop plugin not installed. Using subagents (may burn context on long test runs). Install: `/plugin install ralph-loop`
 
+### Detect Agent Teams
+
+```bash
+echo $CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
+```
+
+Set `$TEAMS_AVAILABLE` to `true` if result is `"1"`, otherwise `false`.
+
 ---
 
 ## Phase 1: Detect Context and Mode
@@ -34,6 +43,9 @@ echo "$ARGUMENTS" | grep -q -- "--marathon" && echo "MARATHON_MODE" || echo "SIN
 ```
 
 Set `$MARATHON_MODE` to `true` or `false`.
+
+**Marathon + Agent Teams early route:**
+If `$MARATHON_MODE` AND `$TEAMS_AVAILABLE`: Skip normal single-task flow. Jump directly to [Marathon Mode: Agent Teams](#marathon-mode-agent-teams).
 
 **Check context in order:**
 1. Current directory - pwd matches TM worktree pattern?
@@ -181,7 +193,7 @@ Report complete.
 
 **Step 3: Post-Cleanup - Check Next Ready (Marathon Mode)**
 
-If `$MARATHON_MODE` is `true`, check for next ready tasks and continue:
+If `$MARATHON_MODE` is `true` AND `$TEAMS_AVAILABLE` is `false` (subagent fallback), check for next ready tasks and continue:
 
 ```bash
 # Get next ready tasks in the tag
@@ -348,10 +360,228 @@ You're an orchestrator. Spawn opus for complex code changes.
 
 ---
 
+## Marathon Mode: Agent Teams
+
+**Prerequisite:** `$MARATHON_MODE` is `true` AND `$TEAMS_AVAILABLE` is `true`.
+
+This mode uses Claude Code Agent Teams to give each task its own teammate in a dedicated iTerm2 pane, with a shared task list for coordination.
+
+### Step 1: Identify Tag and Ready Tasks
+
+Extract tag from `$ARGUMENTS` (strip `--marathon`):
+```bash
+TAG=$(echo "$ARGUMENTS" | sed 's/--marathon//g' | xargs)
+```
+
+Get all tasks for the tag:
+```bash
+cd ~/dev/github.com/<org>/<repo>
+task-master tags use "$TAG" && task-master list --json
+```
+
+Identify ready tasks (pending, no unmet dependencies). Check which tasks are independent (no shared dependencies between them).
+
+If no ready tasks, report tag status and terminate.
+
+### Step 2: Create Team
+
+```
+TeamCreate(
+  team_name: "<tag>",
+  description: "Marathon mode for tag <tag> - <N> tasks total, <M> ready"
+)
+```
+
+### Step 3: Create Internal Tasks and Spawn Teammates
+
+For each ready, independent task:
+
+**Create internal task:**
+```
+TaskCreate(
+  subject: "Implement <tag>.<task-id>: <task-title>",
+  description: "<full task details from task-master show>",
+  activeForm: "Implementing <tag>.<task-id>"
+)
+```
+
+**Spawn teammate (choose model based on task complexity):**
+- Simple tasks (docs, config, complexity 1-3): `model: "haiku"` or `model: "sonnet"`
+- Moderate tasks (complexity 4-6): `model: "sonnet"`
+- Complex tasks (refactoring, architecture, complexity 7+): `model: "opus"`
+
+Use judgment. A one-line version bump doesn't need Opus. A multi-file refactor does.
+
+```
+Task(
+  subagent_type: "general-purpose",
+  team_name: "<tag>",
+  name: "task-<task-id>",
+  model: "<chosen-model>",
+  prompt: """
+# Implement <tag>.<task-id>: <task-title>
+
+## Setup
+```bash
+cd ~/dev/github.com/<org>/<repo>/<repo>-main
+git checkout develop && git pull origin develop
+git branch <tag>--<task-id>--<slug>
+mkdir -p ../worktree/<tag>
+git worktree add ../worktree/<tag>/<task-id>--<slug> <tag>--<task-id>--<slug>
+cd ~/dev/github.com/<org>/<repo>
+task-master tags use "<tag>" && task-master set-status --id=<task-id> --status=in-progress
+cd ~/dev/github.com/<org>/<repo>/worktree/<tag>/<task-id>--<slug>
+```
+
+## Requirements
+<task-description-and-subtasks from task-master show>
+
+## Workflow
+1. **Implement using TDD**: Write failing tests, make them pass, refactor. Commit incrementally.
+2. **Push and create PR**: `gh pr create --title "<type>: <title>" --body "..."`
+3. **Review loop**: Merge origin/develop first each iteration. Then check all 5 green criteria:
+   - No merge conflicts with develop
+   - CI passing
+   - No unresolved inline comments (bots resolve their own; reply to humans)
+   - No unaddressed conversation comments
+   - All your review threads resolved
+4. Fix any issues, push, wait 60s, check again. Loop until all green.
+5. **When PR is ready**: Message the lead.
+
+## Communication
+- When PR is created: `SendMessage(type: "message", recipient: "lead", content: "PR #<number> created for <tag>.<task-id>", summary: "PR created for <task-id>")`
+- When PR is green: `SendMessage(type: "message", recipient: "lead", content: "PR #<number> ready for review - all checks passing", summary: "PR ready for <task-id>")`
+- If blocked: `SendMessage(type: "message", recipient: "lead", content: "Blocked on <reason>", summary: "Blocked on <task-id>")`
+
+## Lifecycle
+1. Implement, create PR, review loop until green → message lead "PR ready"
+2. Wait idle until lead messages you that the PR has been merged
+3. On "merged" message from lead, run cleanup:
+   ```bash
+   cd ~/dev/github.com/<org>/<repo>
+   task-master tags use "<tag>" && task-master set-status --id=<task-id> --status=done
+   cd <repo>-main && git worktree remove ../worktree/<tag>/<task-id>--<slug>
+   git branch -d <tag>--<task-id>--<slug>
+   ```
+4. Message lead confirming cleanup complete
+5. Approve shutdown request from lead (or self-terminate)
+"""
+)
+```
+
+Spawn all independent teammates in a single message (parallel Task calls).
+
+### Step 4: Lead Monitoring
+
+After spawning teammates, report team status:
+```
+## Marathon Started: <tag>
+
+| Task | Teammate | Status |
+|------|----------|--------|
+| <task-id> - <title> | task-<task-id> | Spawned |
+| ... | ... | ... |
+
+Waiting for teammates to create PRs. I'll report when PRs are ready for your review.
+```
+
+**Lead behavior — two concurrent concerns:**
+
+The lead runs two loops simultaneously: reacting to teammate messages, and polling for human merges.
+
+#### Loop A: Teammate Messages (reactive)
+
+- On teammate message "PR created": Acknowledge, update tracking
+- On teammate message "PR ready": Acknowledge, report to user: "PR #X for <tag>.<task-id> is ready for your review"
+- On teammate message "Blocked": Report to user, ask for guidance
+- When multiple PRs ready, consolidate: "N PRs ready for your review: #X, #Y, #Z"
+
+#### Loop B: Merge Polling (proactive)
+
+Once at least one PR is reported ready, start polling for merges every 90 seconds:
+
+```bash
+# Poll all tracked PR numbers for merge status
+for PR in <pr-numbers>; do
+  gh pr view $PR --json number,mergedAt --jq '{number, mergedAt}'
+done
+```
+
+**On detecting a merge:**
+
+1. Report to user: "Detected PR #X merged. Triggering cleanup for <tag>.<task-id>..."
+2. **Message the teammate**: `SendMessage(type: "message", recipient: "task-<task-id>", content: "PR #X merged. Run cleanup: mark TM task done, remove worktree, delete branch. Then confirm.", summary: "PR merged, run cleanup")`
+3. Wait for teammate's cleanup confirmation message
+4. **Shutdown the teammate**: `SendMessage(type: "shutdown_request", recipient: "task-<task-id>", ...)`. Session closes entirely — no compaction needed.
+5. Mark internal task completed via TaskUpdate
+6. Check for newly unblocked tasks:
+   ```bash
+   task-master tags use "<tag>" && task-master list --ready --json
+   ```
+7. **New ready tasks found** → Spawn **fresh** teammates (new session, clean context). Team already exists, don't recreate.
+8. **No ready tasks AND all tasks done** → Proceed to [Step 6: Completion](#step-6-completion)
+9. **No ready tasks BUT some in-progress** → Continue polling, wait for active teammates
+
+**No merges detected** → Sleep 90s, poll again. Continue until all tasks done.
+
+**User can also say "merged" explicitly** → Triggers immediate merge check (skip waiting for next poll).
+
+### Step 5: Human Merges (explicit trigger)
+
+If the user says "merged" or runs `/tm` while the team is active, run an immediate merge check (same logic as Loop B above) instead of waiting for the next poll cycle.
+
+### Ephemeral Teammates Principle
+
+Teammates are **one task, one session**. Task Master is the coordination brain — all state lives there, not in session context.
+
+**Lifecycle of a teammate:**
+```
+Spawn (fresh) → Setup worktree → Implement → PR → Review loop → PR green → Message lead → Idle
+  → Lead detects merge → Messages teammate → Teammate runs cleanup → Confirms → Shutdown
+```
+
+The teammate stays alive through the full cycle because it already has the context (paths, branch names, task IDs) needed for cleanup. But once cleanup is done, the session is terminated — never reused for a different task.
+
+**Why shutdown instead of reuse:**
+- Shutdown is instant. Compaction/clearing is slow and unreliable.
+- No context bloat from prior task's code, test output, review comments.
+- Task Master already knows what to do next — the new session just reads it.
+- Each task gets full context budget for its own work.
+
+**Never reuse a teammate for a different task.** Always shutdown + spawn fresh.
+
+### Step 6: Completion
+
+When all tasks in tag are done:
+1. Shutdown any remaining teammates via `SendMessage(type: "shutdown_request", ...)` (most will already be shut down from the merge cycle)
+2. `TeamDelete()` to clean up team resources
+3. Report:
+```
+## Marathon Complete: <tag>
+
+All <N> tasks done. <N> PRs merged.
+```
+
+---
+
+## Marathon Mode: Subagent Fallback
+
+When `$MARATHON_MODE` is `true` but `$TEAMS_AVAILABLE` is `false`, the existing parallel subagent approach is used (see [Post-Cleanup Marathon Continuation](#step-3-post-cleanup---check-next-ready-marathon-mode) in the cleanup section).
+
+---
+
 ## Orchestrator Flow
 
 ```
-/tm [--marathon] → check Ralph → detect context → route:
+/tm [--marathon] → check Ralph → detect teams → detect context → route:
+  │
+  ├─ Marathon + Teams available → Agent Teams mode (dedicated section)
+  │   ├─ Create team, spawn teammates for ready tasks
+  │   ├─ Each teammate: setup worktree, implement, PR, review loop
+  │   ├─ Lead dual loop:
+  │   │   ├─ Loop A (reactive): teammate messages → track, report to human
+  │   │   └─ Loop B (proactive): poll PRs every 90s → detect merges → cleanup → spawn next
+  │   └─ All done → shutdown team
   │
   ├─ No PR (implement/create)
   │   ├─ Ralph available → invoke Ralph (full cycle)
@@ -363,7 +593,7 @@ You're an orchestrator. Spawn opus for complex code changes.
   │
   ├─ PR merged (cleanup) → launch cleanup-specialist (always subagent)
   │   │
-  │   └─ Marathon mode? Check next ready tasks:
+  │   └─ Marathon mode (no teams)? Check next ready tasks:
   │       ├─ No ready → Report tag complete, STOP
   │       ├─ 1 ready → Start task, LOOP to top
   │       └─ N ready independent → Spawn N parallel agents, LOOP
@@ -372,11 +602,12 @@ You're an orchestrator. Spawn opus for complex code changes.
 ```
 
 **Marathon Mode Behavior:**
+- **With Agent Teams**: Teammates get their own iTerm2 panes, shared task list, direct messaging. Lead coordinates lifecycle.
+- **Without Agent Teams (fallback)**: Parallel subagents after each cleanup cycle.
 - Human merges PRs at their own pace (never auto-merge)
 - After merge detected → cleanup → check next ready → auto-start
 - Independent tasks spawn in parallel (multiple concurrent PRs)
 - Loop continues until all tasks in tag are done
-- Can run for hours/days/weeks - you control progress via PR merges
 
 ---
 
