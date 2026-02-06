@@ -1,6 +1,6 @@
 ---
 description: Task Master - unified command for start, review, and close
-argument-hint: [tag task-id] [--marathon] (optional - derives context from worktree if omitted)
+argument-hint: [tag [task-id]] (optional - derives context from worktree if omitted)
 ---
 
 # Task Master Orchestrator
@@ -9,8 +9,8 @@ argument-hint: [tag task-id] [--marathon] (optional - derives context from workt
 
 > Thin orchestrator. Uses Ralph Loop for iteration when available, falls back to subagents.
 >
-> **Marathon Mode (`--marathon`)**: Automatically progress through all ready tasks in a tag.
-> When Agent Teams are available, each task gets its own teammate (iTerm2 pane) with shared task list.
+> **Marathon Mode** (`/tm <tag>`): When only a tag is given (no task-id), automatically progress through all ready tasks.
+> When Agent Teams are available, each task gets its own teammate with shared task list.
 > When teams unavailable, falls back to parallel subagents.
 > YOU review and merge PRs at your own pace - marathon mode handles the mechanical workflow.
 
@@ -37,12 +37,10 @@ Set `$TEAMS_AVAILABLE` to `true` if result is `"1"`, otherwise `false`.
 
 ## Phase 1: Detect Context and Mode
 
-**Parse marathon flag:**
-```bash
-echo "$ARGUMENTS" | grep -q -- "--marathon" && echo "MARATHON_MODE" || echo "SINGLE_TASK_MODE"
-```
-
-Set `$MARATHON_MODE` to `true` or `false`.
+**Parse arguments to determine mode:**
+- No arguments → Report mode
+- One argument (non-numeric, matches a TM tag) → Marathon mode (`$MARATHON_MODE = true`)
+- Two arguments (tag + task-id) → Single task mode
 
 **Marathon + Agent Teams early route:**
 If `$MARATHON_MODE` AND `$TEAMS_AVAILABLE`: Skip normal single-task flow. Jump directly to [Marathon Mode: Agent Teams](#marathon-mode-agent-teams).
@@ -368,9 +366,9 @@ This mode uses Claude Code Agent Teams to give each task its own teammate in a d
 
 ### Step 1: Identify Tag and Ready Tasks
 
-Extract tag from `$ARGUMENTS` (strip `--marathon`):
+Extract tag from `$ARGUMENTS`:
 ```bash
-TAG=$(echo "$ARGUMENTS" | sed 's/--marathon//g' | xargs)
+TAG=$(echo "$ARGUMENTS" | xargs)
 ```
 
 Get all tasks for the tag:
@@ -592,7 +590,7 @@ When `$MARATHON_MODE` is `true` but `$TEAMS_AVAILABLE` is `false`, the existing 
 ## Orchestrator Flow
 
 ```
-/tm [--marathon] → check Ralph → detect teams → detect context → route:
+/tm [tag [task-id]] → check Ralph → detect teams → parse args → route:
   │
   ├─ Marathon + Teams available → Agent Teams mode (dedicated section)
   │   ├─ Create team, spawn teammates for ready tasks
@@ -659,9 +657,10 @@ Human merges PR     → (no command runs)
 
 - Human merges PRs, never auto-merge (even in marathon mode)
 - Subagents can bail if work is too large
-- Each `/tm` invocation starts fresh (unless using `--marathon`)
+- `/tm` → report ready tasks
+- `/tm <tag>` → marathon mode (work through entire tag)
+- `/tm <tag> <task-id>` → single task mode
 - **Marathon mode**: Runs continuously until all tasks in tag are done
-  - Example: `/tm 19 --marathon` works through all 5 subtasks
-  - Example: `/tm saga-script-versioning --marathon` works through entire tag
+  - Example: `/tm saga-script-versioning` works through entire tag
   - You merge PRs when ready → system auto-continues
   - Parallelizes independent tasks automatically
