@@ -440,18 +440,21 @@ cd ~/dev/github.com/<org>/<repo>/worktree/<tag>/<task-id>--<slug>
 1. **Implement using TDD**: Write failing tests, make them pass, refactor. Commit incrementally.
 2. **Push and create PR**: `gh pr create --title "<type>: <title>" --body "..."`
 3. **Review loop**: Merge origin/develop first each iteration. Then check all 5 green criteria:
-   - No merge conflicts with develop
+   - No merge conflicts with develop — **resolve conflicts yourself**, don't report blocked
    - CI passing
    - No unresolved inline comments (bots resolve their own; reply to humans)
    - No unaddressed conversation comments
    - All your review threads resolved
 4. Fix any issues, push, wait 60s, check again. Loop until all green.
+   - **Merge conflicts are routine** — `git fetch origin develop && git merge origin/develop`, resolve conflicts, commit, push. Only report blocked if the conflict is genuinely ambiguous (e.g., two competing architectural approaches).
 5. **When PR is ready**: Message the lead.
 
 ## Communication
 - When PR is created: `SendMessage(type: "message", recipient: "lead", content: "PR #<number> created for <tag>.<task-id>", summary: "PR created for <task-id>")`
 - When PR is green: `SendMessage(type: "message", recipient: "lead", content: "PR #<number> ready for review - all checks passing", summary: "PR ready for <task-id>")`
 - If blocked: `SendMessage(type: "message", recipient: "lead", content: "Blocked on <reason>", summary: "Blocked on <task-id>")`
+- If task is too complex to complete in one session: `SendMessage(type: "message", recipient: "lead", content: "Task <task-id> is too complex for a single session. Suggest splitting: <brief reasoning>", summary: "Too complex, suggest split <task-id>")`
+  - Don't struggle silently — if you're going in circles or the scope is clearly larger than one PR, flag it early
 
 ## Lifecycle
 1. Implement, create PR, review loop until green → message lead "PR ready"
@@ -493,7 +496,23 @@ The lead runs two loops simultaneously: reacting to teammate messages, and polli
 
 - On teammate message "PR created": Acknowledge, update tracking
 - On teammate message "PR ready": Acknowledge, report to user: "PR #X for <tag>.<task-id> is ready for your review"
-- On teammate message "Blocked": Report to user, ask for guidance
+- On teammate message "Blocked":
+  - **Merge conflicts** → Push back: message teammate "Resolve the merge conflicts yourself — fetch develop, merge, fix conflicts, commit, push. Only escalate if the conflict involves ambiguous architectural decisions."
+  - **Genuinely blocked** (missing API, unclear requirements, needs human decision) → Report to user, ask for guidance
+- On teammate message "Too complex" / "Task too large":
+  1. Shutdown the teammate (their session is now stale with failed attempts)
+  2. Clean up the failed worktree/branch if one was created
+  3. Assess the teammate's reasoning and decide how to decompose:
+     - **Subtasks** (task is one logical unit but needs phased delivery): `task-master expand --id=<task-id> --research`
+     - **Sibling split** (task is actually two+ independent concerns): Cancel the original task and create new peer tasks:
+       ```bash
+       task-master tags use "<tag>" && task-master set-status --id=<task-id> --status=cancelled
+       task-master add-task --title="<first half>" --description="..." --priority=<p>
+       task-master add-task --title="<second half>" --description="..." --priority=<p>
+       ```
+     Use judgment based on what the teammate reported.
+  4. Spawn fresh teammates for the resulting tasks
+  5. Report to user: "Task <task-id> was too complex. Split into N tasks, spawning teammates."
 - When multiple PRs ready, consolidate: "N PRs ready for your review: #X, #Y, #Z"
 
 #### Loop B: Merge Polling (proactive)
