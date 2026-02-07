@@ -513,39 +513,64 @@ The lead runs two loops simultaneously: reacting to teammate messages, and polli
   5. Report to user: "Task <task-id> was too complex. Split into N tasks, spawning teammates."
 - When multiple PRs ready, consolidate: "N PRs ready for your review: #X, #Y, #Z"
 
-#### Loop B: Merge Detection
+#### Loop B: Merge Detection (watcher teammate)
 
-**Reality check:** Claude Code sessions are turn-based. The lead cannot poll in the background — between turns it's dormant. Merge detection requires a trigger.
+The lead spawns a dedicated **watcher** teammate (Haiku, minimal cost) that polls for merges and messages the lead when it detects one. This solves the turn-based limitation — the watcher's messages wake the lead.
 
-**Triggers that wake the lead:**
-1. **Teammate message** — any incoming message gives the lead a turn. On every turn, check all tracked PRs for merges before responding.
-2. **Human poke** — user types anything in the lead session (e.g., "check", hitting enter). Costs ~500 tokens per check.
-3. **Human says "merged"** — explicit trigger, same merge check.
+**Spawn watcher after first PR is created:**
+```
+Task(
+  subagent_type: "general-purpose",
+  team_name: "<tag>",
+  name: "watcher",
+  model: "haiku",
+  prompt: """
+# PR Merge Watcher
 
-**On every lead turn** (regardless of what triggered it), check all tracked PRs:
-```bash
-for PR in <pr-numbers>; do
-  gh pr view $PR --json number,mergedAt --jq '{number, mergedAt}'
-done
+You are a lightweight polling agent. Your only job is to check if PRs have been merged and notify the lead.
+
+## Tracked PRs
+<list of PR numbers and their task-ids>
+
+## Loop
+Repeat until told to stop:
+1. Check all tracked PRs:
+   ```bash
+   for PR in <pr-numbers>; do
+     gh pr view $PR --json number,mergedAt --jq '{number, mergedAt}'
+   done
+   ```
+2. If any PR has `mergedAt` set, message the lead immediately:
+   `SendMessage(type: "message", recipient: "lead", content: "PR #<number> for task <task-id> has been merged", summary: "PR #<number> merged")`
+   Remove that PR from your tracked list.
+3. If no merges detected, wait 90 seconds: `sleep 90`
+4. Repeat from step 1.
+
+If the lead messages you with updated PR numbers, update your tracked list.
+When the lead sends a shutdown request, approve it.
+
+Do NOT do anything else. No code changes, no analysis. Just poll and notify.
+"""
+)
 ```
 
-**On detecting a merge:**
+**When the lead receives a merge notification from watcher:**
 
 1. Report to user: "Detected PR #X merged. Triggering cleanup for <tag>.<task-id>..."
 2. **Message the teammate**: `SendMessage(type: "message", recipient: "task-<task-id>", content: "PR #X merged. Run cleanup: mark TM task done, remove worktree, delete branch. Then confirm.", summary: "PR merged, run cleanup")`
 3. Wait for teammate's cleanup confirmation message
 4. **Shutdown the teammate**: `SendMessage(type: "shutdown_request", recipient: "task-<task-id>", ...)`. Session closes entirely — no compaction needed.
 5. Mark internal task completed via TaskUpdate
-6. Check for newly unblocked tasks:
+6. **Update watcher** if new PRs were created: `SendMessage(type: "message", recipient: "watcher", content: "Add PR #<number> for task <task-id> to your tracked list", summary: "Track new PR")`
+7. Check for newly unblocked tasks:
    ```bash
    task-master tags use "<tag>" && task-master list --ready --json
    ```
-7. **New ready tasks found** → Spawn **fresh** teammates (new session, clean context). Team already exists, don't recreate.
-8. **No ready tasks AND all tasks done** → Proceed to [Step 6: Completion](#step-6-completion)
-9. **No ready tasks BUT some in-progress** → Wait for next trigger
+8. **New ready tasks found** → Spawn **fresh** teammates (new session, clean context). Team already exists, don't recreate.
+9. **No ready tasks AND all tasks done** → Shutdown watcher, proceed to [Step 6: Completion](#step-6-completion)
+10. **No ready tasks BUT some in-progress** → Watcher keeps polling
 
-**After reporting all PRs ready**, prompt the user:
-> All PRs are ready for your review. Type "check" after merging any PRs and I'll handle cleanup and next tasks.
+**Human can also type "check"** in the lead session to trigger an immediate merge check without waiting for the watcher.
 
 ### Ephemeral Teammates Principle
 
