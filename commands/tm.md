@@ -526,26 +526,37 @@ Task(
   name: "watcher",
   model: "haiku",
   prompt: """
-# PR Merge Watcher
+# PR Watcher
 
-You are a lightweight polling agent. Your only job is to check if PRs have been merged and notify the lead.
+You are a lightweight polling agent. Check tracked PRs for state changes and notify the lead.
 
 ## Tracked PRs
-- PR #<number> → task <task-id>
-- PR #<number> → task <task-id>
+- PR #<number> → task <task-id> → teammate: task-<task-id>
+- PR #<number> → task <task-id> → teammate: task-<task-id>
 
 ## Loop
 Repeat until told to stop:
 1. Check all tracked PRs:
    ```bash
    for PR in <pr-numbers>; do
-     gh pr view $PR --json number,mergedAt --jq '{number, mergedAt}'
+     gh pr view $PR --json number,mergedAt,mergeable --jq '{number, mergedAt, mergeable}'
    done
    ```
-2. If any PR has `mergedAt` set, message the lead immediately:
+2. **Merged** — if any PR has `mergedAt` set, message the lead:
    `SendMessage(type: "message", recipient: "lead", content: "MERGED: PR #<number> (task <task-id>)", summary: "PR #<number> merged")`
-3. Wait 90 seconds: `sleep 90`
-4. Repeat from step 1.
+3. **Merge conflicts** — if `mergeable` is `"CONFLICTING"`, message the lead:
+   `SendMessage(type: "message", recipient: "lead", content: "CONFLICT: PR #<number> (task <task-id>) has merge conflicts with base branch", summary: "PR #<number> conflicts")`
+4. Check for new review activity:
+   ```bash
+   for PR in <pr-numbers>; do
+     gh api repos/<owner>/<repo>/pulls/$PR/comments \
+       --jq '[.[] | select(.created_at > "<last-check-timestamp>")] | length'
+   done
+   ```
+5. **New comments** — if count > 0, message the lead:
+   `SendMessage(type: "message", recipient: "lead", content: "COMMENTS: PR #<number> (task <task-id>) has <N> new review comments since last check", summary: "PR #<number> new comments")`
+6. Wait 90 seconds: `sleep 90`
+7. Repeat from step 1. Update `<last-check-timestamp>` to current time each iteration.
 
 When the lead sends a shutdown request, approve it immediately.
 Do NOT do anything else. No code changes, no analysis. Just poll and notify.
@@ -553,22 +564,29 @@ Do NOT do anything else. No code changes, no analysis. Just poll and notify.
 )
 ```
 
-**When the lead receives a merge notification from watcher:**
+**When the lead receives a notification from watcher:**
 
-1. **Shutdown the watcher immediately** — its PR list is now stale
+**MERGED** notification:
+1. **Shutdown the watcher** — PR list is stale
 2. Report to user: "Detected PR #X merged. Triggering cleanup for <tag>.<task-id>..."
 3. **Message the task teammate**: `SendMessage(type: "message", recipient: "task-<task-id>", content: "PR #X merged. Run cleanup: mark TM task done, remove worktree, delete branch. Then confirm.", summary: "PR merged, run cleanup")`
-4. Wait for teammate's cleanup confirmation message
-5. **Shutdown the task teammate**
-6. Mark internal task completed via TaskUpdate
-7. Check for newly unblocked tasks:
+4. Wait for teammate's cleanup confirmation, then **shutdown the task teammate**
+5. Mark internal task completed via TaskUpdate
+6. Check for newly unblocked tasks:
    ```bash
    task-master tags use "<tag>" && task-master list --ready --json
    ```
-8. **New ready tasks found** → Spawn fresh task teammates
-9. **Respawn a fresh watcher** with the updated PR list (remaining + any new PRs)
-10. **No ready tasks AND all tasks done** → Don't respawn watcher, proceed to [Step 6: Completion](#step-6-completion)
-11. **No ready tasks BUT some in-progress** → Respawn watcher with remaining PRs
+7. Spawn fresh task teammates for any newly ready tasks
+8. **Respawn a fresh watcher** with the updated PR list (remaining + any new PRs)
+9. If all tasks done → Don't respawn watcher, proceed to [Step 6: Completion](#step-6-completion)
+
+**CONFLICT** notification:
+1. **Message the task teammate**: `SendMessage(type: "message", recipient: "task-<task-id>", content: "Your PR has merge conflicts with the base branch. Fetch develop, merge, resolve conflicts, commit and push.", summary: "Resolve merge conflicts")`
+2. Watcher keeps polling — no need to kill/respawn for conflicts
+
+**COMMENTS** notification:
+1. **Message the task teammate**: `SendMessage(type: "message", recipient: "task-<task-id>", content: "Your PR has new review comments. Check inline and conversation comments, address them, push fixes.", summary: "New review comments on PR")`
+2. Watcher keeps polling — no need to kill/respawn for comments
 
 **Human can also type "check"** in the lead session to trigger an immediate merge check without waiting for the watcher.
 
