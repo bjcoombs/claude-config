@@ -513,12 +513,17 @@ The lead runs two loops simultaneously: reacting to teammate messages, and polli
   5. Report to user: "Task <task-id> was too complex. Split into N tasks, spawning teammates."
 - When multiple PRs ready, consolidate: "N PRs ready for your review: #X, #Y, #Z"
 
-#### Loop B: Merge Polling (proactive)
+#### Loop B: Merge Detection
 
-Once at least one PR is reported ready, start polling for merges every 90 seconds:
+**Reality check:** Claude Code sessions are turn-based. The lead cannot poll in the background — between turns it's dormant. Merge detection requires a trigger.
 
+**Triggers that wake the lead:**
+1. **Teammate message** — any incoming message gives the lead a turn. On every turn, check all tracked PRs for merges before responding.
+2. **Human poke** — user types anything in the lead session (e.g., "check", hitting enter). Costs ~500 tokens per check.
+3. **Human says "merged"** — explicit trigger, same merge check.
+
+**On every lead turn** (regardless of what triggered it), check all tracked PRs:
 ```bash
-# Poll all tracked PR numbers for merge status
 for PR in <pr-numbers>; do
   gh pr view $PR --json number,mergedAt --jq '{number, mergedAt}'
 done
@@ -537,15 +542,10 @@ done
    ```
 7. **New ready tasks found** → Spawn **fresh** teammates (new session, clean context). Team already exists, don't recreate.
 8. **No ready tasks AND all tasks done** → Proceed to [Step 6: Completion](#step-6-completion)
-9. **No ready tasks BUT some in-progress** → Continue polling, wait for active teammates
+9. **No ready tasks BUT some in-progress** → Wait for next trigger
 
-**No merges detected** → Sleep 90s, poll again. Continue until all tasks done.
-
-**User can also say "merged" explicitly** → Triggers immediate merge check (skip waiting for next poll).
-
-### Step 5: Human Merges (explicit trigger)
-
-If the user says "merged" or runs `/tm` while the team is active, run an immediate merge check (same logic as Loop B above) instead of waiting for the next poll cycle.
+**After reporting all PRs ready**, prompt the user:
+> All PRs are ready for your review. Type "check" after merging any PRs and I'll handle cleanup and next tasks.
 
 ### Ephemeral Teammates Principle
 
